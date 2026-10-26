@@ -207,6 +207,9 @@ settings:
 importers:
   .:
     dependencies:
+      "@fontsource/dela-gothic-one":
+        specifier: 5.3.0
+        version: 5.3.0
       hono:
         specifier: 4.13.14
         version: 4.13.14
@@ -758,6 +761,12 @@ packages:
     engines: { node: ">=18" }
     cpu: [x64]
     os: [win32]
+
+  "@fontsource/dela-gothic-one@5.3.0":
+    resolution:
+      {
+        integrity: sha512-4A26Qs7TqYFWegJfYHx7KKWy01YybW/e7uhFDM8A8e1neVPm721laLnh0en60wtKihfNdCbJt0VVcEMHC4pHjw==,
+      }
 
   "@img/colour@1.1.0":
     resolution:
@@ -2526,6 +2535,8 @@ snapshots:
 
   "@esbuild/win32-x64@0.28.2":
     optional: true
+
+  "@fontsource/dela-gothic-one@5.3.0": {}
 
   "@img/colour@1.1.0": {}
 

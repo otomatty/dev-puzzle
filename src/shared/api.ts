@@ -8,11 +8,12 @@ export interface PuzzleSummary {
   difficulty: number;
   /** クリア報告の数 */
   solves: number;
+  /** 一覧のサムネイルにも使うので一覧にも含める */
+  definition: PuzzleDefinition;
 }
 
 export interface PuzzleDetail extends PuzzleSummary {
   hint: string;
-  definition: PuzzleDefinition;
   /** 次のステージの ID。最後のステージなら null */
   nextId: string | null;
 }

@@ -1,0 +1,899 @@
+/* ------------------------------------------------------------------
+ * トークン
+ * 方眼紙の上に、厚みのあるタイルとロボットを置くイメージ。
+ * 主役は盤面なので、まわりの UI は平らで静かにしておく。
+ * ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --paper: #e7ecf2;
+  --paper-grid: rgb(29 36 51 / 0.06);
+  --surface: #f7f9fb;
+  --ink: #1d2433;
+  --ink-soft: #566078;
+  --line: #c3ccd9;
+  --focus: #2f5fc4;
+
+  --tile-red: #dc4848;
+  --tile-red-edge: #a32f2f;
+  --tile-green: #2b9a58;
+  --tile-green-edge: #1c6f3f;
+  --tile-blue: #386ad4;
+  --tile-blue-edge: #264b9c;
+  --robot: #f5c33b;
+  --robot-ink: #1d2433;
+
+  /* 見出しだけ Web フォント。本文は OS の日本語フォントで軽く表示する */
+  --font-display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+  --font-body:
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP",
+    system-ui, sans-serif;
+
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #182031;
+    --paper-grid: rgb(255 255 255 / 0.045);
+    --surface: #212a3d;
+    --ink: #e5e9f1;
+    --ink-soft: #9ca6ba;
+    --line: #3a4560;
+    --focus: #8fb0ff;
+    --tile-red-edge: #8a2424;
+    --tile-green-edge: #165a33;
+    --tile-blue-edge: #1d3b7d;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * ベース
+ * ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--paper-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------
+ * 枠組み
+ * ------------------------------------------------------------------ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 18px 24px;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.app-main {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 8px 24px 64px;
+}
+
+.page-message {
+  display: grid;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--ink-soft);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  appearance: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.toggle input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink);
+  transition: transform 160ms ease;
+}
+
+.toggle input:checked {
+  background: var(--robot);
+}
+
+.toggle input:checked::after {
+  transform: translateX(16px);
+  background: var(--robot-ink);
+}
+
+/* ------------------------------------------------------------------
+ * ボタン
+ * ------------------------------------------------------------------ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--robot);
+  color: var(--robot-ink);
+  border-color: var(--robot-ink);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: #ffd45c;
+}
+
+.button--quiet {
+  min-height: 36px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------
+ * 難しさ・クリア表示
+ * ------------------------------------------------------------------ */
+.difficulty {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.difficulty-pip {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+}
+
+.difficulty-pip--on {
+  background: var(--ink);
+}
+
+.cleared-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: var(--robot);
+  color: var(--robot-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------------------
+ * 盤面
+ * ------------------------------------------------------------------ */
+.board {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(52vh, 540px);
+  overflow: visible;
+}
+
+.tile {
+  transition: fill var(--step-ms, 0ms) ease;
+}
+
+.tile--red {
+  fill: var(--tile-red);
+}
+.tile--green {
+  fill: var(--tile-green);
+}
+.tile--blue {
+  fill: var(--tile-blue);
+}
+.tile-edge--red {
+  fill: var(--tile-red-edge);
+}
+.tile-edge--green {
+  fill: var(--tile-green-edge);
+}
+.tile-edge--blue {
+  fill: var(--tile-blue-edge);
+}
+
+.tile-glyph {
+  fill: rgb(255 255 255 / 0.85);
+}
+
+.star {
+  fill: #fff;
+  stroke: rgb(0 0 0 / 0.28);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.robot {
+  transition: transform var(--step-ms, 0ms) ease-in-out;
+}
+
+.robot-body {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.robot-body path {
+  fill: var(--robot);
+  stroke: var(--robot-ink);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.robot-eye {
+  fill: var(--robot-ink);
+}
+
+.robot--fell .robot-body {
+  animation: robot-fall 520ms ease-in forwards;
+}
+
+.robot--won .robot-body {
+  animation: robot-cheer 720ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes robot-fall {
+  to {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+}
+
+@keyframes robot-cheer {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.45);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------------
+ * ステージ一覧
+ * ------------------------------------------------------------------ */
+.list-intro {
+  display: grid;
+  gap: 12px;
+  max-width: 38em;
+  margin: 24px 0 40px;
+}
+
+.list-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.list-progress {
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.stage-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 36px 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  align-items: baseline;
+  text-decoration: none;
+}
+
+.stage-card-board {
+  grid-column: 1 / -1;
+  display: block;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  transition: border-color 120ms ease;
+}
+
+.stage-card:hover .stage-card-board,
+.stage-card:focus-visible .stage-card-board {
+  border-color: var(--ink);
+}
+
+.stage-card:focus-visible {
+  outline: none;
+}
+
+.stage-card-board .board {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.stage-card-number {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.stage-card-title {
+  font-weight: 700;
+  font-size: 1.0625rem;
+}
+
+.stage-card-meta {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+/* ------------------------------------------------------------------
+ * プレイ画面
+ * ------------------------------------------------------------------ */
+.play-head {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 24px;
+}
+
+.back-link {
+  justify-self: start;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.play-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.625rem, 3.6vw, 2.25rem);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.play-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.hint {
+  max-width: 40em;
+  font-size: 0.9375rem;
+}
+
+.hint summary {
+  justify-self: start;
+  width: fit-content;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.hint p {
+  margin-top: 4px;
+}
+
+.player {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(330px, 0.8fr);
+  gap: 40px;
+  align-items: start;
+}
+
+.stage {
+  display: grid;
+  gap: 16px;
+}
+
+.stage-board {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+}
+
+.stage-status {
+  display: flex;
+  gap: 24px;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.stage-status strong {
+  color: var(--ink);
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.result:empty {
+  display: none;
+}
+
+.result-box {
+  display: grid;
+  gap: 4px;
+  padding: 14px 18px;
+  scroll-margin-bottom: 16px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.result-box--won {
+  border-color: var(--robot-ink);
+  background: var(--robot);
+  color: var(--robot-ink);
+}
+
+.result-box--won .button:not(.button--primary) {
+  border-color: var(--robot-ink);
+  background: transparent;
+  color: var(--robot-ink);
+}
+
+.result-box--won .button--primary {
+  background: var(--robot-ink);
+  color: var(--robot);
+}
+
+.result-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  line-height: 1.3;
+}
+
+.result-box--lost .result-title {
+  color: var(--tile-red);
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.speed {
+  display: inline-flex;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.speed-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.speed-option input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.speed-option span {
+  display: block;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.speed-option input:checked + span {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.speed-option input:focus-visible + span {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+/* ------------------------------------------------------------------
+ * プログラム
+ * ------------------------------------------------------------------ */
+.editor {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.program {
+  display: grid;
+  gap: 12px;
+}
+
+.program-row {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.program-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.program-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.slot--empty {
+  border-style: dashed;
+}
+
+.slot--filled {
+  border-color: var(--ink);
+  background: var(--surface);
+}
+
+.slot--cond-red {
+  background: var(--tile-red);
+  border-color: var(--tile-red-edge);
+  color: #fff;
+}
+.slot--cond-green {
+  background: var(--tile-green);
+  border-color: var(--tile-green-edge);
+  color: #fff;
+}
+.slot--cond-blue {
+  background: var(--tile-blue);
+  border-color: var(--tile-blue-edge);
+  color: #fff;
+}
+
+.slot--selected {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.slot--current {
+  box-shadow: 0 0 0 5px var(--robot);
+}
+
+.slot-glyph {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  display: flex;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.op-call {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+.palette {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 2px dashed var(--line);
+}
+
+.palette-target {
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+.palette-legend {
+  width: 100%;
+  margin-bottom: 2px;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.palette-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.palette-op {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.palette-op:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.palette-op:disabled,
+.palette-cond:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.palette-op--erase {
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.palette-cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.palette-cond--red {
+  color: var(--tile-red);
+  border-color: var(--tile-red);
+}
+.palette-cond--green {
+  color: var(--tile-green);
+  border-color: var(--tile-green);
+}
+.palette-cond--blue {
+  color: var(--tile-blue);
+  border-color: var(--tile-blue);
+}
+
+.palette-cond[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.palette-cond--red[aria-pressed="true"] {
+  background: var(--tile-red);
+  border-color: var(--tile-red);
+  color: #fff;
+}
+.palette-cond--green[aria-pressed="true"] {
+  background: var(--tile-green);
+  border-color: var(--tile-green);
+  color: #fff;
+}
+.palette-cond--blue[aria-pressed="true"] {
+  background: var(--tile-blue);
+  border-color: var(--tile-blue);
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .palette-cond--red,
+  .palette-cond--green,
+  .palette-cond--blue {
+    color: var(--ink);
+  }
+}
+
+/* ------------------------------------------------------------------
+ * 狭い画面
+ * ------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .player {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .board {
+    max-height: 52vh;
+  }
+
+  .speed {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-header,
+  .app-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .toggle span {
+    font-size: 0.8125rem;
+  }
+
+  .editor {
+    padding: 16px 12px;
+  }
+
+  .palette-op {
+    width: 42px;
+    height: 42px;
+  }
+
+  .slot {
+    width: 40px;
+    height: 40px;
+  }
+
+  .program-row {
+    grid-template-columns: 28px 1fr;
+  }
+
+  .stage-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .robot,
+  .tile,
+  .toggle input::after,
+  .stage-card-board {
+    transition: none;
+  }
+
+  .robot--fell .robot-body {
+    animation: none;
+    opacity: 0.25;
+  }
+
+  .robot--won .robot-body {
+    animation: none;
+  }
+}

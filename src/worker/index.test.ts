@@ -40,7 +40,13 @@ describe("GET /api/puzzles", () => {
     expect(res.status).toBe(200);
     const { puzzles } = await res.json<PuzzleListResponse>();
     expect(puzzles.map((p) => p.id)).toEqual(CATALOG.map((p) => p.id));
-    expect(puzzles[0]).toEqual({ id: first.id, title: first.title, difficulty: 1, solves: 0 });
+    expect(puzzles[0]).toEqual({
+      id: first.id,
+      title: first.title,
+      difficulty: 1,
+      solves: 0,
+      definition: first.definition,
+    });
   });
 });
 
