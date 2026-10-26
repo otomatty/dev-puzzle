@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "robozzle",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    // React の SPA を静的配信し、/api/* だけ Worker で処理する
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}
