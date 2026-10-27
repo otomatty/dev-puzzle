@@ -21,7 +21,7 @@ export function buildSeedSql(catalog: readonly CatalogPuzzle[]): string {
   );
 
   return [
-    "-- このファイルは `pnpm db:generate-seed` で src/puzzles/catalog.ts から生成しています。直接編集しないでください。",
+    "-- このファイルは `bun run db:generate-seed` で src/puzzles/catalog.ts から生成しています。直接編集しないでください。",
     "INSERT INTO puzzles (id, title, difficulty, sort_order, hint, definition) VALUES",
     rows.map((row) => `  (${row})`).join(",\n"),
     "ON CONFLICT (id) DO UPDATE SET",

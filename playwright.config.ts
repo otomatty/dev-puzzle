@@ -21,7 +21,7 @@ export default defineConfig({
   // 本番と同じ workerd 上で動く `vite preview` に対して E2E を実行する
   webServer: {
     // ローカルの D1 にスキーマとステージを入れてから起動する
-    command: `pnpm db:setup:local && pnpm build && pnpm preview --port ${PORT} --strictPort`,
+    command: `bun run db:setup:local && bun run build && bun run preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

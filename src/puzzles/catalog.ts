@@ -13,7 +13,7 @@ export interface CatalogPuzzle {
 
 /**
  * 内蔵ステージ。並び順がそのまま一覧の順番になる。
- * 変更したら `pnpm db:seed` で D1 のシード用マイグレーションを作り直すこと。
+ * 変更したら `bun run db:generate-seed` で D1 のシード SQL を作り直すこと。
  */
 export const CATALOG: readonly CatalogPuzzle[] = [
   {
