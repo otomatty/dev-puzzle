@@ -35,7 +35,10 @@
 - **Vitest**: Vite と設定を共有でき、Cloudflare 公式プラグインで Worker と D1 を本番と同じ workerd 上でテストできる。旧 `@cloudflare/vitest-pool-workers` は非推奨になったため後継の `@cloudflare/vitest-plugin` を使う。
 - **Playwright**: `vite preview`(workerd + ローカル D1)に対して、デスクトップとモバイルの両方で E2E を回す。
 
-すべての依存は完全一致でバージョンを固定している。`bunfig.toml` で `minimumReleaseAge`(公開から 1 日未満の版を入れない)を有効にし、インストール時のスクリプト実行は `trustedDependencies` に挙げた esbuild と workerd だけに許可している。
+依存パッケージまわりの安全策は、次の 2 つのファイルで設定している。
+
+- `package.json`: 依存はすべて完全一致のバージョンで書く。`trustedDependencies` で、インストール時のスクリプト実行を esbuild と workerd だけに許可している
+- `bunfig.toml`: `exact = true` で `bun add` でも完全一致のバージョンで保存し、`minimumReleaseAge = 86400` で公開から 1 日未満の版を入れない
 
 Bun はパッケージマネージャとスクリプトの実行に使う。Vite・Vitest・Wrangler・Playwright は Node.js 上で動くので、Node.js 22.18 以上も必要(`.node-version`)。
 
