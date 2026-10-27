@@ -17,6 +17,7 @@
 | データベース              | Cloudflare D1                           |                           |
 | フロントエンド            | React + Vite(`@cloudflare/vite-plugin`) | React 19.3.1 / Vite 8.3.5 |
 | API                       | Hono                                    | 4.13.14                   |
+| ログイン                  | Better Auth(Google アカウント)          | 1.7.13                    |
 | 言語 / 型チェック         | TypeScript(ネイティブ版 `tsc`)          | 7.0.2                     |
 | パッケージマネージャ      | Bun                                     | 1.4.4                     |
 
@@ -50,7 +51,7 @@ src/
   engine/    ゲームのルール(盤面・命令・実行)。DOM にも Workers にも依存しない純粋な TS
   puzzles/   内蔵ステージの定義(catalog.ts)と D1 用シード SQL の生成
   shared/    API のレスポンス型(Worker とクライアントで共有)
-  worker/    Hono の API(/api/*)、D1 アクセス、Google ログイン
+  worker/    Hono の API(/api/*)、D1 アクセス、ログイン(Better Auth)
   client/    React の UI
 migrations/  D1 のスキーマ
 seeds/       内蔵ステージを登録する SQL(catalog.ts から生成。手で編集しない)
@@ -101,32 +102,44 @@ bun run dev              # http://localhost:5173
 
 ログインは任意で、していなくてもすべてのステージを遊べる。ログインするとヘッダーに名前とアイコンが出る。組んだプログラムとクリア状況は、ログインしていてもこれまでどおりブラウザに保存する。
 
-- Google の OpenID Connect(認可コードフロー)を、ライブラリを使わず Worker で実装している(`src/worker/google.ts`)。state・nonce・PKCE(S256)を付け、ID トークンの発行者・宛先・有効期限・nonce を確かめる
-- ログインできたら D1 の `users` にユーザーを登録し(Google アカウントの `sub` で本人を見分ける)、`sessions` にセッションを作る。ブラウザには HttpOnly・SameSite=Lax の Cookie でトークンを渡し、D1 にはそのハッシュ(SHA-256)だけを置く
-- セッションの有効期間は 30 日。残りが 15 日を切ってからアクセスすると、そこから 30 日に延びる
-- ログインが終わると、ログインを始めた画面に戻る。戻り先はアプリ内のパスだけを受け付ける
-- ほかのサイトのフォームからの POST は、Hono の CSRF ミドルウェアで拒否する
+ログインには [Better Auth](https://www.better-auth.com/) を使い、手段は Google アカウントだけにしている。設定は `src/worker/auth.ts`、画面側は `src/client/auth.tsx`(Better Auth のクライアント)。
 
-| API                                    | 内容                                                             |
-| -------------------------------------- | ---------------------------------------------------------------- |
-| `GET /api/me`                          | ログイン中のユーザー。未ログインなら `{ "user": null }`          |
-| `GET /api/auth/google?returnTo=<パス>` | ログインを始める(Google の画面に転送する)                        |
-| `GET /api/auth/google/callback`        | Google からの戻り先。失敗したら戻り先に `?login=failed` を付ける |
-| `POST /api/auth/logout`                | ログアウト                                                       |
+- `/api/auth/*` を Better Auth に任せる。Google へは state と PKCE(S256)を付けて移り、ログイン途中の state は D1 に置く
+- ユーザー・セッション・連携アカウント・state は D1 の `user`・`session`・`account`・`verification` に保存する。Google のアクセストークンは暗号化して保存する
+- セッションの Cookie は HttpOnly・SameSite=Lax(HTTPS では Secure)で、`BETTER_AUTH_SECRET` で署名する。D1 の中身だけではなりすませない
+- セッションの有効期間は 30 日。前回の延長から 1 日以上たってアクセスすると、そこから 30 日に延びる
+- ログインが終わると、ログインを始めた画面に戻る。戻り先はこのアプリの URL だけを受け付ける(Better Auth が検証する)。失敗したときは戻り先に `?error=<理由>` が付き、画面に案内を出す
+- ほかのサイトからの POST は、Better Auth が Origin と Fetch Metadata を見て拒否する
+- Better Auth のレート制限は `NODE_ENV=production` のときだけ有効になる。Workers では通常無効なので、必要なら Cloudflare のレート制限ルールを使う
+
+主なエンドポイント(どれも Better Auth が提供する):
+
+| API                             | 内容                                                    |
+| ------------------------------- | ------------------------------------------------------- |
+| `GET /api/auth/get-session`     | ログイン中のユーザーとセッション。未ログインなら `null` |
+| `POST /api/auth/sign-in/social` | ログインを始める。Google の認可画面の URL を返す        |
+| `GET /api/auth/callback/google` | Google からの戻り先                                     |
+| `POST /api/auth/sign-out`       | ログアウト                                              |
 
 ### 設定
 
 1. [Google Cloud Console](https://console.cloud.google.com/) の「Google Auth Platform」で、ブランディング(アプリ名など)と対象(外部・内部)を設定する
 2. 「クライアント」から、種類が「ウェブ アプリケーション」の OAuth クライアントを作り、「承認済みのリダイレクト URI」に次を登録する(「承認済みの JavaScript 生成元」は不要)
-   - `http://localhost:5173/api/auth/google/callback`(`bun run dev`)
-   - `http://localhost:4173/api/auth/google/callback`(`bun run preview`)
-   - `https://<本番のドメイン>/api/auth/google/callback`
-3. ローカル: `.dev.vars.example` を `.dev.vars` にコピーし、クライアント ID とクライアント シークレットを書く
-4. 本番: `bunx wrangler secret put GOOGLE_CLIENT_ID` と `bunx wrangler secret put GOOGLE_CLIENT_SECRET` で登録する
+   - `http://localhost:5173/api/auth/callback/google`(`bun run dev`)
+   - `http://localhost:4173/api/auth/callback/google`(`bun run preview`)
+   - `https://<本番のドメイン>/api/auth/callback/google`
+3. ローカル: `.dev.vars.example` を `.dev.vars` にコピーし、`BETTER_AUTH_SECRET`(`openssl rand -base64 32` で作る)と、クライアント ID・クライアント シークレットを書く
+4. 本番: `bunx wrangler secret put BETTER_AUTH_SECRET`、`bunx wrangler secret put GOOGLE_CLIENT_ID`、`bunx wrangler secret put GOOGLE_CLIENT_SECRET` で登録する(`BETTER_AUTH_SECRET` はローカルと別の値にする)
 
 公開ステータスが「テスト」のあいだは、「対象」のテストユーザーに追加したアカウントしかログインできない。
 
-`wrangler.jsonc` の `secrets.required` に 2 つのシークレットを書いているので、`worker-configuration.d.ts` に型が入る。未設定のまま `bun run dev` すると警告が出て、ログインのリンクを押すと 503 になる(ステージは遊べる)。本番では未設定のままの `wrangler deploy` が失敗する。
+`wrangler.jsonc` の `secrets.required` に 3 つのシークレットを書いているので、`worker-configuration.d.ts` に型が入る。未設定のまま `bun run dev` すると警告が出て、ログインできない(ステージは遊べる)。本番では未設定のままの `wrangler deploy` が失敗する。E2E では `playwright.config.ts` からダミーの値を渡している。
+
+Better Auth は `node:async_hooks` と `node:crypto` を使うので、`wrangler.jsonc` で `nodejs_compat` を有効にしている。
+
+### Better Auth を更新するとき
+
+`migrations/0002_create_auth_tables.sql` は、Better Auth の `getMigrations` が出力した SQL。更新で必要なテーブルや列が変わると、`src/worker/auth.test.ts` のスキーマのテストが失敗し、足りない分の SQL を表示する。その SQL で `migrations/` に新しいマイグレーションを足す。
 
 ## CI
 
@@ -147,6 +160,6 @@ bun run db:setup:remote    # 本番 D1 にスキーマとステージを入れ�
 
 初回デプロイ後に `wrangler.jsonc` に追記された `database_id` はコミットしておく。以降、スキーマやステージを変えたときは `bun run db:setup:remote` を流してから `bun run deploy` する。
 
-Google ログインのシークレット(「Google ログイン」の設定 4)がないとデプロイは失敗する。Worker がまだない初回は `wrangler secret put` が使えないので、`.dev.vars.example` と同じ形式のファイル(`.dev.vars.production` など `.gitignore` 済みの名前にする)に本番の値を書き、`bun run build && bunx wrangler deploy --secrets-file .dev.vars.production` でデプロイする。シークレットは一度登録すれば以降のデプロイに引き継がれる。
+ログインのシークレット(「Google ログイン」の設定 4)がないとデプロイは失敗する。Worker がまだない初回は `wrangler secret put` が使えないので、`.dev.vars.example` と同じ形式のファイル(`.dev.vars.production` など `.gitignore` 済みの名前にする)に本番の値を書き、`bun run build && bunx wrangler deploy --secrets-file .dev.vars.production` でデプロイする。シークレットは一度登録すれば以降のデプロイに引き継がれる。
 
 Cloudflare の Workers Builds(GitHub 連携)で自動デプロイする場合は、ビルドコマンドを `bun run build`、デプロイコマンドを `bunx wrangler deploy && bun run db:setup:remote` にする(Workers Builds は `bun.lock` を見て Bun でインストールする)。シークレットは先に `wrangler secret put` かダッシュボードで登録しておく。

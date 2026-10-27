@@ -9,8 +9,10 @@ await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 beforeEach(async () => {
   const seeds = env.TEST_SEEDS.flatMap((seed) => seed.queries);
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM sessions"),
-    env.DB.prepare("DELETE FROM users"),
+    env.DB.prepare("DELETE FROM session"),
+    env.DB.prepare("DELETE FROM account"),
+    env.DB.prepare("DELETE FROM verification"),
+    env.DB.prepare('DELETE FROM "user"'),
     env.DB.prepare("DELETE FROM puzzles"),
     ...seeds.map((query) => env.DB.prepare(query)),
   ]);

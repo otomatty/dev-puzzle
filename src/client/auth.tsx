@@ -1,11 +1,19 @@
+import { createAuthClient } from "better-auth/client";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import type { User } from "../shared/api";
-import { fetchMe, logout as requestLogout } from "./api";
 
 /**
  * ログイン状態。ログインは任意で、していなくてもすべてのステージを遊べる。
- * セッションは HttpOnly の Cookie にあるので、状態は /api/me に問い合わせて知る。
+ * ログインやセッションの確認は Better Auth のクライアントで Worker の /api/auth/* に問い合わせる。
  */
+
+export const authClient = createAuthClient({
+  fetchOptions: {
+    // テストで差し替えられるよう、呼ぶたびにその時点の fetch を使う
+    customFetchImpl: (input, init) => fetch(input, init),
+  },
+});
+
+export type User = typeof authClient.$Infer.Session.user;
 
 export type AuthState =
   | { status: "loading" }
@@ -14,38 +22,46 @@ export type AuthState =
 
 interface Auth {
   state: AuthState;
-  /** Google のログインから失敗して戻ってきた */
+  /** ログインに失敗した(Google から失敗して戻ってきた、または始められなかった) */
   loginFailed: boolean;
   dismissLoginFailed: () => void;
-  logout: () => Promise<void>;
+  /** Google の画面に移る(移れたら true)。ログインが終わると returnTo の画面に戻る */
+  signIn: (returnTo: string) => Promise<boolean>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<Auth>({
   state: { status: "loading" },
   loginFailed: false,
   dismissLoginFailed: () => {},
-  logout: async () => {},
+  signIn: async () => false,
+  signOut: async () => {},
 });
 
-/** Worker はログインに失敗すると、元の画面に ?login=failed を付けて戻す */
-function isLoginFailedUrl(): boolean {
-  return new URLSearchParams(window.location.search).get("login") === "failed";
+/**
+ * Better Auth はログインに失敗すると、元の画面に ?error=<理由> を付けて戻す。
+ * Google の画面でキャンセルしただけ(access_denied)なら、失敗の案内は出さない。
+ */
+function loginErrorInUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("error");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
-  const [loginFailed, setLoginFailed] = useState(isLoginFailedUrl);
+  const [loginError] = useState(loginErrorInUrl);
+  const [loginFailed, setLoginFailed] = useState(
+    () => loginError !== null && loginError !== "access_denied",
+  );
 
+  // 確かめられなかったときも、ログインし直せるよう未ログインとして扱う
   useEffect(() => {
     const controller = new AbortController();
-    fetchMe(controller.signal).then(
-      (user) => {
-        if (!controller.signal.aborted) {
-          setState(user ? { status: "signedIn", user } : { status: "signedOut" });
-        }
+    authClient.getSession({ fetchOptions: { signal: controller.signal } }).then(
+      ({ data }) => {
+        if (controller.signal.aborted) return;
+        setState(data ? { status: "signedIn", user: data.user } : { status: "signedOut" });
       },
       () => {
-        // 確かめられなかったときも、ログインし直せるよう未ログインとして扱う
         if (!controller.signal.aborted) setState({ status: "signedOut" });
       },
     );
@@ -54,25 +70,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 再読み込みで同じ案内が出ないよう、URL からは消しておく
   useEffect(() => {
-    if (!loginFailed) return;
+    if (loginError === null) return;
     const url = new URL(window.location.href);
-    url.searchParams.delete("login");
+    url.searchParams.delete("error");
+    url.searchParams.delete("error_description");
     window.history.replaceState(null, "", url);
-  }, [loginFailed]);
+  }, [loginError]);
 
-  const logout = useCallback(async () => {
-    try {
-      await requestLogout();
-      setState({ status: "signedOut" });
-    } catch {
-      // 失敗したらログイン中のまま。もう一度押せばやり直せる
+  // Better Auth のクライアントは、エラーの応答なら error を返し、通信できなければ例外を投げる
+  const signIn = useCallback(async (returnTo: string) => {
+    const url = await authClient.signIn
+      .social({
+        provider: "google",
+        callbackURL: returnTo,
+        errorCallbackURL: returnTo,
+        // Google の画面への移動はこちらで行う
+        disableRedirect: true,
+      })
+      .then(
+        ({ data }) => data?.url,
+        () => undefined,
+      );
+    if (!url) {
+      setLoginFailed(true);
+      return false;
     }
+    window.location.assign(url);
+    return true;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const ok = await authClient.signOut().then(
+      ({ error }) => !error,
+      () => false,
+    );
+    // 失敗したらログイン中のまま。もう一度押せばやり直せる
+    if (ok) setState({ status: "signedOut" });
   }, []);
 
   const dismissLoginFailed = useCallback(() => setLoginFailed(false), []);
 
   return (
-    <AuthContext.Provider value={{ state, loginFailed, dismissLoginFailed, logout }}>
+    <AuthContext.Provider value={{ state, loginFailed, dismissLoginFailed, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

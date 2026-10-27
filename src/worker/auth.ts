@@ -1,125 +1,64 @@
-import { Hono } from "hono";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import type { ErrorResponse, MeResponse } from "../shared/api";
-import {
-  type AuthorizationRequest,
-  authorizationUrl,
-  createAuthorizationRequest,
-  exchangeCode,
-  type GoogleClient,
-} from "./google";
-import {
-  type AppContext,
-  cookieOptions,
-  createSession,
-  deleteSession,
-  getSessionUser,
-  upsertUser,
-} from "./session";
+import { betterAuth } from "better-auth";
 
 /**
- * Google アカウントでのログイン。
- * /api/auth/google でログインを始め、Google から /api/auth/google/callback に戻ってきたら
- * セッションを作って元の画面に戻す。
+ * ログインは Better Auth で行う。ログインの手段は Google アカウントだけ。
+ * ユーザー・セッション・連携アカウント・ログイン途中の state は D1 に保存する
+ * (テーブルは migrations/0002_create_auth_tables.sql)。
  */
 
-const LOGIN_COOKIE = "google_login";
-/** ログイン用の Cookie は開始とコールバックにだけ送る */
-const LOGIN_COOKIE_PATH = "/api/auth/google";
-const CALLBACK_PATH = "/api/auth/google/callback";
-/** Google の画面でアカウントを選ぶまでの猶予(秒) */
-const LOGIN_TTL = 10 * 60;
+const DAY = 60 * 60 * 24;
 
-interface PendingLogin extends AuthorizationRequest {
-  returnTo: string;
-}
-
-/**
- * ログイン後に戻る先。オープンリダイレクトにならないよう、このアプリの中のパスだけを受け付ける。
- * (`//evil.example` のようなプロトコル相対 URL や、クエリ・バックスラッシュを含むものは不可)
- */
-export function safeReturnTo(value: string | undefined): string {
-  return value && value.length <= 200 && /^\/(?!\/)[\w\-/]*$/.test(value) ? value : "/";
-}
-
-function googleClient(c: AppContext): GoogleClient | null {
-  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = c.env;
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return null;
-  return {
-    clientId: GOOGLE_CLIENT_ID,
-    clientSecret: GOOGLE_CLIENT_SECRET,
-    redirectUri: new URL(CALLBACK_PATH, c.req.url).toString(),
-  };
-}
-
-function readPendingLogin(raw: string | undefined): PendingLogin | null {
-  if (!raw) return null;
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null) return null;
-    const { state, codeVerifier, nonce, returnTo } = value as Record<string, unknown>;
-    if (typeof state !== "string" || typeof codeVerifier !== "string") return null;
-    if (typeof nonce !== "string" || typeof returnTo !== "string") return null;
-    return { state, codeVerifier, nonce, returnTo: safeReturnTo(returnTo) };
-  } catch {
-    return null;
+export function createAuth(env: Env, baseURL: string) {
+  // Better Auth は NODE_ENV が production でないと、鍵がなくても公開されている既定の鍵で動いてしまう。
+  // Workers では NODE_ENV が決まらないので、ここで止める
+  if (!env.BETTER_AUTH_SECRET) {
+    throw new Error("BETTER_AUTH_SECRET が設定されていません(README の「Google ログイン」を参照)");
   }
-}
-
-/** ログインに失敗したことを、戻った先の画面に伝える */
-function failedUrl(returnTo: string) {
-  return `${returnTo}?login=failed`;
-}
-
-export const auth = new Hono<{ Bindings: Env }>();
-
-auth.get("/me", async (c) => {
-  const user = await getSessionUser(c);
-  c.header("cache-control", "no-store");
-  return c.json<MeResponse>({ user });
-});
-
-auth.get("/auth/google", async (c) => {
-  const client = googleClient(c);
-  if (!client) {
-    return c.json<ErrorResponse>({ error: "Google ログインが設定されていません" }, 503);
-  }
-  const request = createAuthorizationRequest();
-  const pending: PendingLogin = { ...request, returnTo: safeReturnTo(c.req.query("returnTo")) };
-  setCookie(c, LOGIN_COOKIE, JSON.stringify(pending), {
-    ...cookieOptions(c, LOGIN_COOKIE_PATH),
-    maxAge: LOGIN_TTL,
+  return betterAuth({
+    appName: "RoboZZle",
+    // リクエストが届いたオリジン。Google からの戻り先 URL と、Cookie に Secure を付けるかはここから決まる
+    baseURL,
+    secret: env.BETTER_AUTH_SECRET,
+    database: env.DB,
+    socialProviders: {
+      google: {
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+        // 共有の端末でも別のアカウントでログインできるよう、毎回アカウントを選んでもらう
+        prompt: "select_account",
+        // Google 側で名前やアイコンを変えたら、次のログインで反映する
+        overrideUserInfoOnSignIn: true,
+      },
+    },
+    session: {
+      expiresIn: 30 * DAY,
+      // 前回の延長から 1 日以上たってアクセスしたら、期限を延ばす
+      updateAge: DAY,
+    },
+    account: {
+      // Google のアクセストークンなどは使わないが保存はされるので、暗号化しておく
+      encryptOAuthTokens: true,
+    },
+    // 戻り先がわからないままログインに失敗したときは、Better Auth のエラー画面ではなくトップに戻す
+    onAPIError: { errorURL: "/" },
+    advanced: {
+      // 接続元の IP は Cloudflare が付けるヘッダーから取る
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+    },
+    telemetry: { enabled: false },
   });
-  return c.redirect(await authorizationUrl(client, request));
-});
+}
 
-auth.get("/auth/google/callback", async (c) => {
-  const pending = readPendingLogin(getCookie(c, LOGIN_COOKIE));
-  deleteCookie(c, LOGIN_COOKIE, cookieOptions(c, LOGIN_COOKIE_PATH));
-  const returnTo = pending?.returnTo ?? "/";
+export type Auth = ReturnType<typeof createAuth>;
 
-  // Google の画面でキャンセルされたときは、何もせず元の画面に戻す
-  const error = c.req.query("error");
-  if (error === "access_denied") return c.redirect(returnTo);
+const instances = new Map<string, Auth>();
 
-  const client = googleClient(c);
-  const code = c.req.query("code");
-  if (error || !client || !pending || !code || c.req.query("state") !== pending.state) {
-    return c.redirect(failedUrl(returnTo));
+/** 初期化をリクエストごとにしないよう、オリジンごとに使い回す(env は Worker の中で変わらない) */
+export function getAuth(env: Env, origin: string): Auth {
+  let auth = instances.get(origin);
+  if (!auth) {
+    auth = createAuth(env, origin);
+    instances.set(origin, auth);
   }
-
-  try {
-    const profile = await exchangeCode(client, code, pending);
-    const user = await upsertUser(c.env.DB, profile);
-    await createSession(c, user.id);
-  } catch (err) {
-    console.error(err);
-    return c.redirect(failedUrl(returnTo));
-  }
-  return c.redirect(returnTo);
-});
-
-auth.post("/auth/logout", async (c) => {
-  await deleteSession(c);
-  return c.body(null, 204);
-});
+  return auth;
+}

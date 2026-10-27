@@ -1,7 +1,5 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { csrf } from "hono/csrf";
-import { HTTPException } from "hono/http-exception";
 import { parseProgram, runToEnd } from "../engine";
 import type {
   ClearResponse,
@@ -9,17 +7,17 @@ import type {
   PuzzleListResponse,
   PuzzleResponse,
 } from "../shared/api";
-import { auth } from "./auth";
+import { getAuth } from "./auth";
 import { findPuzzle, incrementSolves, listPuzzles } from "./db";
 
 const app = new Hono<{ Bindings: Env }>().basePath("/api");
 
-// ログインの Cookie を使うので、ほかのサイトのフォームからの POST は受け付けない
-app.use(csrf());
-
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-app.route("/", auth);
+// ログイン・ログアウト・セッションの取得などは Better Auth に任せる
+app.on(["GET", "POST"], "/auth/*", (c) =>
+  getAuth(c.env, new URL(c.req.url).origin).handler(c.req.raw),
+);
 
 app.get("/puzzles", async (c) => {
   const puzzles = await listPuzzles(c.env.DB);
@@ -64,7 +62,6 @@ app.post(
 app.notFound((c) => c.json<ErrorResponse>({ error: "Not Found" }, 404));
 
 app.onError((err, c) => {
-  if (err instanceof HTTPException) return err.getResponse();
   console.error(err);
   return c.json<ErrorResponse>({ error: "サーバーでエラーが発生しました" }, 500);
 });

@@ -47,6 +47,7 @@ export default defineConfig({
                 TEST_MIGRATIONS: await readD1Migrations("./migrations"),
                 TEST_SEEDS: await readD1Migrations("./seeds"),
                 // Google へのリクエストはテストで差し替えるので、ダミーの値でよい
+                BETTER_AUTH_SECRET: "test-secret-Hk3vQ9pZ2mX7rT5wL8nB4cY6dF1gJ0sA",
                 GOOGLE_CLIENT_ID: "test-client-id.apps.googleusercontent.com",
                 GOOGLE_CLIENT_SECRET: "test-client-secret",
               },

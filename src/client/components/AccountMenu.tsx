@@ -1,17 +1,15 @@
 import { useState } from "react";
-import type { User } from "../../shared/api";
-import { loginUrl } from "../api";
-import { useAuth } from "../auth";
+import { type User, useAuth } from "../auth";
 import { usePathname } from "../router";
 import { GoogleLogo } from "./icons";
 
 function Avatar({ user }: { user: User }) {
   const [broken, setBroken] = useState(false);
-  if (user.picture && !broken) {
+  if (user.image && !broken) {
     return (
       <img
         className="account-avatar"
-        src={user.picture}
+        src={user.image}
         alt=""
         width={32}
         height={32}
@@ -30,27 +28,39 @@ function Avatar({ user }: { user: User }) {
 
 /** ヘッダーのログイン・ログアウト */
 export function AccountMenu() {
-  const { state, logout } = useAuth();
+  const { state, signIn, signOut } = useAuth();
   const pathname = usePathname();
+  const [pending, setPending] = useState(false);
+
+  const handleSignIn = async () => {
+    setPending(true);
+    // Google の画面に移るときは押せないままでよい。始められなかったときだけ戻す
+    if (!(await signIn(pathname))) setPending(false);
+  };
 
   if (state.status === "loading") return null;
   if (state.status === "signedOut") {
-    // Worker から Google の画面に移るので、アプリ内の Link ではなく普通のリンクにする。
     // 狭い画面では「Google で」を隠すので、読み上げ用の名前は aria-label で固定する
     return (
-      <a className="button google-login" href={loginUrl(pathname)} aria-label="Google でログイン">
+      <button
+        type="button"
+        className="button google-login"
+        aria-label="Google でログイン"
+        disabled={pending}
+        onClick={handleSignIn}
+      >
         <GoogleLogo />
         <span>
           <span className="google-login-prefix">Google で</span>ログイン
         </span>
-      </a>
+      </button>
     );
   }
   return (
     <div className="account">
       <Avatar user={state.user} />
       <span className="account-name">{state.user.name}</span>
-      <button type="button" className="button button--quiet" onClick={logout}>
+      <button type="button" className="button button--quiet" onClick={signOut}>
         ログアウト
       </button>
     </div>
