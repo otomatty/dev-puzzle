@@ -178,6 +178,14 @@ input {
   background: var(--robot-ink);
 }
 
+.app-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 20px;
+}
+
 /* ------------------------------------------------------------------
  * ボタン
  * ------------------------------------------------------------------ */
@@ -223,6 +231,59 @@ input {
   background: transparent;
   color: var(--ink-soft);
   font-weight: 400;
+}
+
+/* ------------------------------------------------------------------
+ * ログイン
+ * ------------------------------------------------------------------ */
+.google-login {
+  white-space: nowrap;
+}
+
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.account-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--robot);
+  color: var(--robot-ink);
+  font-weight: 700;
+  object-fit: cover;
+}
+
+.account-name {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 8px 8px 16px;
+  border: 2px solid var(--tile-red);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9375rem;
+}
+
+.notice .button {
+  flex: none;
 }
 
 /* ------------------------------------------------------------------
@@ -854,6 +915,17 @@ input {
 
   .toggle span {
     font-size: 0.8125rem;
+  }
+
+  /* 狭い画面では見た目だけ短くする(読み上げは「Google でログイン」やユーザー名のまま) */
+  .google-login-prefix,
+  .account-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .editor {

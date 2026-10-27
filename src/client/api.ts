@@ -3,10 +3,12 @@ import type {
   ClearRequest,
   ClearResponse,
   ErrorResponse,
+  MeResponse,
   PuzzleDetail,
   PuzzleListResponse,
   PuzzleResponse,
   PuzzleSummary,
+  User,
 } from "../shared/api";
 
 export class ApiError extends Error {
@@ -46,4 +48,19 @@ export async function reportClear(id: string, program: Program): Promise<number>
     body: JSON.stringify(body),
   });
   return solves;
+}
+
+export async function fetchMe(signal?: AbortSignal): Promise<User | null> {
+  const { user } = await request<MeResponse>("/api/me", { signal });
+  return user;
+}
+
+/** Google のログイン画面に移る URL。ログインが終わると returnTo の画面に戻る */
+export function loginUrl(returnTo: string): string {
+  return `/api/auth/google?${new URLSearchParams({ returnTo })}`;
+}
+
+export async function logout(): Promise<void> {
+  const res = await fetch("/api/auth/logout", { method: "POST" });
+  if (!res.ok) throw new ApiError(`ログアウトに失敗しました (${res.status})`, res.status);
 }

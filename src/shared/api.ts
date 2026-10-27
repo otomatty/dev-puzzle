@@ -34,6 +34,20 @@ export interface ClearResponse {
   solves: number;
 }
 
+/** ログイン中のユーザー */
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  /** プロフィール画像の URL。Google 側で設定されていなければ null */
+  picture: string | null;
+}
+
+export interface MeResponse {
+  /** ログインしていなければ null */
+  user: User | null;
+}
+
 export interface ErrorResponse {
   error: string;
 }

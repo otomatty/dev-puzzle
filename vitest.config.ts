@@ -18,6 +18,7 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/client/main.tsx",
         "src/client/test/**",
+        "src/worker/test/**",
       ],
     },
     projects: [
@@ -45,6 +46,9 @@ export default defineConfig({
               bindings: {
                 TEST_MIGRATIONS: await readD1Migrations("./migrations"),
                 TEST_SEEDS: await readD1Migrations("./seeds"),
+                // Google へのリクエストはテストで差し替えるので、ダミーの値でよい
+                GOOGLE_CLIENT_ID: "test-client-id.apps.googleusercontent.com",
+                GOOGLE_CLIENT_SECRET: "test-client-secret",
               },
             },
           })),

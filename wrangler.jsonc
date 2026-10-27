@@ -17,6 +17,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Google ログインの OAuth クライアント。ローカルは .dev.vars、本番は `wrangler secret put` で設定する
+  "secrets": {
+    "required": ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+  },
   "observability": {
     "enabled": true
   }

@@ -1,3 +1,5 @@
+import { AuthProvider } from "./auth";
+import { AccountMenu, LoginFailedNotice } from "./components/AccountMenu";
 import { PlayPage } from "./pages/PlayPage";
 import { PuzzleListPage } from "./pages/PuzzleListPage";
 import { Link, matchRoute, usePathname } from "./router";
@@ -39,17 +41,23 @@ function Routes() {
 export function App() {
   return (
     <SettingsProvider>
-      <div className="app">
-        <header className="app-header">
-          <Link className="wordmark" href="/">
-            RoboZZle
-          </Link>
-          <ColorAssistToggle />
-        </header>
-        <main className="app-main">
-          <Routes />
-        </main>
-      </div>
+      <AuthProvider>
+        <div className="app">
+          <header className="app-header">
+            <Link className="wordmark" href="/">
+              RoboZZle
+            </Link>
+            <div className="app-header-actions">
+              <ColorAssistToggle />
+              <AccountMenu />
+            </div>
+          </header>
+          <main className="app-main">
+            <LoginFailedNotice />
+            <Routes />
+          </main>
+        </div>
+      </AuthProvider>
     </SettingsProvider>
   );
 }
