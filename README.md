@@ -51,7 +51,7 @@ bun run dev
 3. `.dev.vars.example` を `.dev.vars` にコピーし、値を入れる。`BETTER_AUTH_SECRET` は `openssl rand -base64 32` で作る。
 4. 本番には、同じ 3 つを `bunx wrangler secret put <名前>` で登録する。`BETTER_AUTH_SECRET` はローカルと別の値にする。
 
-3 つのシークレットは `wrangler.jsonc` の `secrets.required` に書いてあり、本番に登録していないと `bun run deploy` は失敗します。ログインの表は `migrations/0002_create_auth_tables.sql` で、本番へは `bun run db:setup:remote` で反映します。
+3 つのシークレットは `wrangler.jsonc` の `secrets.required` に書いてあり、本番に登録していないとデプロイは失敗します。ログインの表は `migrations/0002_create_auth_tables.sql` で、本番へはデプロイのときに反映されます。
 
 E2E では Google を通せないので、`e2e/global-setup.ts` がローカルのデータベースにテスト用のユーザーとセッションを入れ、ブラウザにそのセッションの Cookie を持たせます(`e2e/session.ts`)。シークレットは、`.dev.vars` がなければ `playwright.config.ts` からダミーの値を渡し、あれば `.dev.vars` の値を使います。
 
@@ -64,7 +64,24 @@ E2E では Google を通せないので、`e2e/global-setup.ts` がローカル�
 
 模範解答はテストにだけあり、サイトには出しません。シード SQL は手で編集しません。`seeds/` が `catalog.ts` とずれているとテストが失敗します。
 
-本番のクリア人数を残したままステージを更新するときは、先にリモートのデータベースへ反映してからデプロイします。D1 の ID は `wrangler.jsonc` に書いてあります。
+main にマージすると、本番のデータベースにステージが反映されてからデプロイされます。クリア人数は残ります。
+
+## デプロイ
+
+main に push されると(pull request のマージを含む)、GitHub Actions(`.github/workflows/ci.yml`)が lint、型検査、テスト、Playwright を実行し、すべて通ったら Cloudflare にデプロイします。デプロイのジョブは、先に `bun run db:setup:remote` で本番の D1 にマイグレーションとステージを反映し、そのあと `bun run deploy` を実行します。ステージの反映は upsert なので、クリア人数は残ります。
+
+main への push が続いたときは、実行中のものは止めずにデプロイまで進め、終わってから次を実行します。途中で止めると、マイグレーションだけ反映されてデプロイされないことがあるためです。待っているあいだにさらに push があったときは、待っているうちのいちばん新しいものだけを実行します。
+
+GitHub Actions から Cloudflare に入るために、リポジトリの「Settings」→「Secrets and variables」→「Actions」に次の 2 つを登録します。
+
+| 名前                    | 値                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLOUDFLARE_API_TOKEN`  | Cloudflare ダッシュボードの「Account API Tokens」で、テンプレート「Edit Cloudflare Workers」から作り、権限に「D1」の「Edit」を足したトークン。対象のアカウントはこのアプリのものだけにする |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID。`bunx wrangler whoami` で表示される                                                                                                                            |
+
+デプロイのジョブは `production` という Environment で動きます。デプロイの前に承認を挟みたいときは、「Settings」→「Environments」→「production」で保護ルールを足します。デプロイが失敗したら、Actions の画面から失敗したジョブを再実行できます。
+
+手元からデプロイするときは、同じ順に実行します。D1 の ID は `wrangler.jsonc` に書いてあります。
 
 ```sh
 bun run db:setup:remote
@@ -75,7 +92,7 @@ bun run deploy
 
 ゲームのルールは `src/engine/` にあります。ブラウザは 1 手ずつ動かして表示し、サーバーはクリア報告を受けたときに同じルールで最後まで実行します。ステージ定義は `src/puzzles/catalog.ts`、API は `src/worker/`、画面は `src/client/` です。
 
-配信は Cloudflare Workers、ステージとクリア人数は D1、画面は React です。push と pull request では、lint、型検査、テスト、Playwright が動きます。
+配信は Cloudflare Workers、ステージとクリア人数は D1、画面は React です。push と pull request では、lint、型検査、テスト、Playwright が動き、main ではそれが通ったあとで本番にデプロイします。
 
 ログインは Better Auth で、手段は Google アカウントだけです。ユーザーとセッションも D1 に保存します。ステージの API(`/api/puzzles` 以下)は、ログインしていないと 401 を返します。設定は `src/worker/auth.ts`、画面側は `src/client/auth.tsx` です。Better Auth は Node.js の機能を使うので、`wrangler.jsonc` で `nodejs_compat` を有効にしています。Better Auth に組み込まれたレート制限は Workers では有効にならないので、必要なら Cloudflare のレート制限ルールを使います。
 
