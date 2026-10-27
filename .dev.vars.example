@@ -1,6 +1,6 @@
 # ローカル開発用のシークレット。このファイルを .dev.vars にコピーして値を入れる(.dev.vars はコミットしない)
 # Better Auth が Cookie の署名などに使う鍵。`openssl rand -base64 32` で作る
 BETTER_AUTH_SECRET=
-# Google Cloud Console で作った OAuth クライアント(README の「Google ログイン」を参照)
+# Google Cloud Console で作った OAuth クライアント(README の「Google ログインを設定する」を参照)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=

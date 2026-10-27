@@ -12,10 +12,12 @@ export function createAuth(env: Env, baseURL: string) {
   // Better Auth は NODE_ENV が production でないと、鍵がなくても公開されている既定の鍵で動いてしまう。
   // Workers では NODE_ENV が決まらないので、ここで止める
   if (!env.BETTER_AUTH_SECRET) {
-    throw new Error("BETTER_AUTH_SECRET が設定されていません(README の「Google ログイン」を参照)");
+    throw new Error(
+      "BETTER_AUTH_SECRET が設定されていません(README の「Google ログインを設定する」を参照)",
+    );
   }
   return betterAuth({
-    appName: "RoboZZle",
+    appName: "DevPuzzle",
     // リクエストが届いたオリジン。Google からの戻り先 URL と、Cookie に Secure を付けるかはここから決まる
     baseURL,
     secret: env.BETTER_AUTH_SECRET,

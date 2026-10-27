@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "robozzle",
-      // database_id は省略している。初回の `wrangler deploy` で D1 が自動作成される
+      "database_id": "8bd14ad9-6f6d-4875-aa07-c226aa30064b",
       "migrations_dir": "migrations"
     }
   ],
