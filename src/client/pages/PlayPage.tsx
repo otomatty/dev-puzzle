@@ -18,7 +18,7 @@ export function PlayPage({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    if (state.status === "ready") document.title = `${state.data.title} | RoboZZle`;
+    if (state.status === "ready") document.title = `${state.data.title} | DevPuzzle`;
   }, [state]);
 
   // クリア人数は、このブラウザで初めてクリアしたときだけ報告する

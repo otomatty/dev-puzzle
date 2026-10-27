@@ -12,7 +12,7 @@ export function PuzzleListPage() {
   const cleared = useMemo(() => loadCleared(), []);
 
   useEffect(() => {
-    document.title = "RoboZZle";
+    document.title = "DevPuzzle";
   }, []);
 
   return (
