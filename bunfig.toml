@@ -1,0 +1,10 @@
+[install]
+# 依存は package.json に完全一致のバージョンで書く(bun add でも ^ を付けない)
+exact = true
+# 公開から 1 日たっていない版は入れない(乗っ取られたパッケージの即時配布への備え)
+minimumReleaseAge = 86400
+
+[test]
+# テストは Vitest で書いている。`bun test`(Bun 組み込みのテストランナー)で
+# 実行されると Workers 用のテストなどが動かないので、案内を出して止める
+preload = ["./scripts/bun-test-guard.ts"]

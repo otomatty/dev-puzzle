@@ -22,7 +22,7 @@ describe("buildSeedSql", () => {
     expect(sql).toContain("'It''s'");
   });
 
-  it("seeds/0001_puzzles.sql が catalog.ts と一致している(`pnpm db:generate-seed` で更新)", () => {
+  it("seeds/0001_puzzles.sql が catalog.ts と一致している(`bun run db:generate-seed` で更新)", () => {
     const file = readFileSync(new URL("../../seeds/0001_puzzles.sql", import.meta.url), "utf8");
     expect(file).toBe(buildSeedSql(CATALOG));
   });

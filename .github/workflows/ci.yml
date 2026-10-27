@@ -22,22 +22,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      # Vitest・Wrangler・Vite は Node.js 上で動く
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       - name: Biome
-        run: pnpm exec biome ci --reporter=github .
+        run: bunx biome ci --reporter=github .
       - name: 型チェック
-        run: pnpm typecheck
+        run: bun run typecheck
       - name: シードが catalog.ts と一致しているか
         run: |
-          pnpm db:generate-seed
+          bun run db:generate-seed
           git diff --exit-code seeds/
       - name: Vitest
-        run: pnpm test:coverage
+        run: bun run test:coverage
 
   e2e:
     name: E2E (Playwright)
@@ -45,14 +47,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

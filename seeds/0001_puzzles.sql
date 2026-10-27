@@ -1,4 +1,4 @@
--- このファイルは `pnpm db:generate-seed` で src/puzzles/catalog.ts から生成しています。直接編集しないでください。
+-- このファイルは `bun run db:generate-seed` で src/puzzles/catalog.ts から生成しています。直接編集しないでください。
 INSERT INTO puzzles (id, title, difficulty, sort_order, hint, definition) VALUES
   ('first-steps', 'まっすぐ進もう', 1, 1, '前進を並べて、星まで進みましょう。', '{"board":["bbbbB"],"start":{"x":0,"y":0,"direction":"right"},"functions":[5],"paints":[]}'),
   ('corners', '曲がり角', 1, 2, '右回転・左回転はその場で向きだけを変えます。', '{"board":["bbb.","..b.","..bB"],"start":{"x":0,"y":0,"direction":"right"},"functions":[8],"paints":[]}'),

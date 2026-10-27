@@ -17,7 +17,7 @@
 | フロントエンド            | React + Vite(`@cloudflare/vite-plugin`) | React 19.3.1 / Vite 8.3.5 |
 | API                       | Hono                                    | 4.13.14                   |
 | 言語 / 型チェック         | TypeScript(ネイティブ版 `tsc`)          | 7.0.2                     |
-| パッケージマネージャ      | pnpm                                    | 12.15.0                   |
+| パッケージマネージャ      | Bun                                     | 1.4.4                     |
 
 ## Lint・テスト
 
@@ -35,7 +35,9 @@
 - **Vitest**: Vite と設定を共有でき、Cloudflare 公式プラグインで Worker と D1 を本番と同じ workerd 上でテストできる。旧 `@cloudflare/vitest-pool-workers` は非推奨になったため後継の `@cloudflare/vitest-plugin` を使う。
 - **Playwright**: `vite preview`(workerd + ローカル D1)に対して、デスクトップとモバイルの両方で E2E を回す。
 
-すべての依存は完全一致でバージョンを固定し、pnpm の `minimumReleaseAge`(公開から 1 日未満の版を入れない)を有効のままにしている。
+すべての依存は完全一致でバージョンを固定している。`bunfig.toml` で `minimumReleaseAge`(公開から 1 日未満の版を入れない)を有効にし、インストール時のスクリプト実行は `trustedDependencies` に挙げた esbuild と workerd だけに許可している。
+
+Bun はパッケージマネージャとスクリプトの実行に使う。Vite・Vitest・Wrangler・Playwright は Node.js 上で動くので、Node.js 22.18 以上も必要(`.node-version`)。
 
 ## ディレクトリ
 
@@ -62,31 +64,31 @@ Vitest は 3 プロジェクトに分かれている。
 ## 開発
 
 ```sh
-pnpm install
-pnpm db:setup:local   # ローカルの D1 にスキーマとステージを入れる(初回とステージ変更時)
-pnpm dev              # http://localhost:5173
+bun install
+bun run db:setup:local   # ローカルの D1 にスキーマとステージを入れる(初回とステージ変更時)
+bun run dev              # http://localhost:5173
 ```
 
-| コマンド                | 内容                                                         |
-| ----------------------- | ------------------------------------------------------------ |
-| `pnpm check`            | Biome(lint + format)                                         |
-| `pnpm check:fix`        | Biome の自動修正                                             |
-| `pnpm typecheck`        | `tsc -b`                                                     |
-| `pnpm test`             | Vitest(engine / client / worker)                             |
-| `pnpm test:coverage`    | カバレッジ付き                                               |
-| `pnpm test:e2e`         | Playwright(初回は `pnpm exec playwright install chromium`)   |
-| `pnpm verify`           | check + typecheck + test                                     |
-| `pnpm db:generate-seed` | `catalog.ts` から `seeds/0001_puzzles.sql` を作り直す        |
-| `pnpm cf-typegen`       | `wrangler.jsonc` から `worker-configuration.d.ts` を作り直す |
+| コマンド                   | 内容                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `bun run check`            | Biome(lint + format)                                         |
+| `bun run check:fix`        | Biome の自動修正                                             |
+| `bun run typecheck`        | `tsc -b`                                                     |
+| `bun run test`             | Vitest(engine / client / worker)                             |
+| `bun run test:coverage`    | カバレッジ付き                                               |
+| `bun run test:e2e`         | Playwright(初回は `bunx playwright install chromium`)        |
+| `bun run verify`           | check + typecheck + test                                     |
+| `bun run db:generate-seed` | `catalog.ts` から `seeds/0001_puzzles.sql` を作り直す        |
+| `bun run cf-typegen`       | `wrangler.jsonc` から `worker-configuration.d.ts` を作り直す |
 
-`pnpm ci` と `pnpm deploy` は pnpm 自体のコマンドと名前がぶつかるため、スクリプト名は `verify` と `cf:deploy` にしている。
+テストは `bun run test` で実行する。`bun test` は Bun 組み込みのテストランナーが起動してしまうため、案内を出して止めるようにしている(`scripts/bun-test-guard.ts`)。
 
 ### ステージを追加・変更する
 
 1. `src/puzzles/catalog.ts` を編集する(公開済みステージの `id` は変えない)
 2. `src/puzzles/catalog.test.ts` の `SOLUTIONS` に模範解答を書く
-3. `pnpm db:generate-seed` でシード SQL を作り直す
-4. `pnpm test` で全ステージが解けることを確認する
+3. `bun run db:generate-seed` でシード SQL を作り直す
+4. `bun run test` で全ステージが解けることを確認する
 
 シード SQL は upsert なので、本番で流し直してもクリア人数は保たれる。`seeds/` が `catalog.ts` とずれていると、テストと CI が失敗する。
 
@@ -102,11 +104,11 @@ pnpm dev              # http://localhost:5173
 `wrangler.jsonc` の D1 には `database_id` を書いていない。初回の `wrangler deploy` で D1 が自動作成され、ID が `wrangler.jsonc` に書き戻される。
 
 ```sh
-pnpm exec wrangler login
-pnpm cf:deploy          # ビルドしてデプロイ(初回は D1 も作成される)
-pnpm db:setup:remote    # 本番 D1 にスキーマとステージを入れる
+bunx wrangler login
+bun run deploy             # ビルドしてデプロイ(初回は D1 も作成される)
+bun run db:setup:remote    # 本番 D1 にスキーマとステージを入れる
 ```
 
-初回デプロイ後に `wrangler.jsonc` に追記された `database_id` はコミットしておく。以降、スキーマやステージを変えたときは `pnpm db:setup:remote` を流してから `pnpm cf:deploy` する。
+初回デプロイ後に `wrangler.jsonc` に追記された `database_id` はコミットしておく。以降、スキーマやステージを変えたときは `bun run db:setup:remote` を流してから `bun run deploy` する。
 
-Cloudflare の Workers Builds(GitHub 連携)で自動デプロイする場合は、ビルドコマンドを `pnpm build`、デプロイコマンドを `pnpm exec wrangler deploy && pnpm db:setup:remote` にする。
+Cloudflare の Workers Builds(GitHub 連携)で自動デプロイする場合は、ビルドコマンドを `bun run build`、デプロイコマンドを `bunx wrangler deploy && bun run db:setup:remote` にする(Workers Builds は `bun.lock` を見て Bun でインストールする)。
