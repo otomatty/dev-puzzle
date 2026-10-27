@@ -5,13 +5,33 @@ import { App } from "./App";
 import type { User } from "./auth";
 import { colored, mockFetch, straightLine, summaries } from "./test/fixtures";
 
+const signedIn: User = {
+  id: "user-1",
+  name: "ロボ 太郎",
+  email: "robo@example.com",
+  emailVerified: true,
+  image: null,
+  createdAt: new Date("2026-10-01T00:00:00Z"),
+  updatedAt: new Date("2026-10-01T00:00:00Z"),
+};
+
+function session(user: User) {
+  return {
+    user,
+    session: { id: "session-1", userId: user.id, expiresAt: "2026-11-30T00:00:00Z" },
+  };
+}
+
+/** ふだんはログイン中として応答する */
 const ROUTES = {
-  "GET /api/auth/get-session": null,
+  "GET /api/auth/get-session": session(signedIn),
   "GET /api/puzzles": { puzzles: summaries },
   "GET /api/puzzles/first-steps": { puzzle: straightLine },
   "GET /api/puzzles/colored": { puzzle: colored },
   "POST /api/puzzles/first-steps/clears": { solves: 4 },
 };
+
+const SIGNED_OUT = { ...ROUTES, "GET /api/auth/get-session": null };
 
 describe("App", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -69,10 +89,10 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "ステージ一覧に戻る" })).toBeInTheDocument();
   });
 
-  it("未定義のページは案内を表示する", () => {
+  it("未定義のページは案内を表示する", async () => {
     window.history.replaceState(null, "", "/nowhere");
     render(<App />);
-    expect(screen.getByText("このページは見つかりません。")).toBeInTheDocument();
+    expect(await screen.findByText("このページは見つかりません。")).toBeInTheDocument();
   });
 
   it("色を形でも表示する設定を保存する", async () => {
@@ -84,20 +104,6 @@ describe("App", () => {
 });
 
 describe("ログイン", () => {
-  const signedIn: User = {
-    id: "user-1",
-    name: "ロボ 太郎",
-    email: "robo@example.com",
-    emailVerified: true,
-    image: null,
-    createdAt: new Date("2026-10-01T00:00:00Z"),
-    updatedAt: new Date("2026-10-01T00:00:00Z"),
-  };
-  const session = (user: User) => ({
-    user,
-    session: { id: "session-1", userId: user.id, expiresAt: "2026-11-30T00:00:00Z" },
-  });
-
   function stubFetch(routes: Record<string, unknown>) {
     const fetchMock = vi.fn(mockFetch(routes));
     vi.stubGlobal("fetch", fetchMock);
@@ -124,12 +130,37 @@ describe("ログイン", () => {
     vi.restoreAllMocks();
   });
 
-  it("未ログインなら、押すと今の画面に戻ってくる設定で Google の画面に移る", async () => {
+  it("ログインしていなければ、開いた画面の代わりにログイン画面を出し、ステージは読み込まない", async () => {
+    const fetchMock = stubFetch(SIGNED_OUT);
+    window.history.replaceState(null, "", "/puzzles/first-steps");
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "ログインして遊ぶ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Google でログイン" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ログアウト" })).not.toBeInTheDocument();
+    expect(document.title).toBe("ログイン | DevPuzzle");
+    const paths = fetchMock.mock.calls.map(
+      ([input]) => new URL(String(input), "http://x").pathname,
+    );
+    expect(paths.filter((path) => path.startsWith("/api/puzzles"))).toEqual([]);
+  });
+
+  it("ログイン状態を確かめているあいだは、ステージもログイン画面も出さない", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+    render(<App />);
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Google でログイン" })).not.toBeInTheDocument();
+  });
+
+  it("押すと今の画面に戻ってくる設定で Google の画面に移る", async () => {
     const user = userEvent.setup();
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     const googleUrl = "https://accounts.google.com/o/oauth2/v2/auth?client_id=test";
     const fetchMock = stubFetch({
-      ...ROUTES,
+      ...SIGNED_OUT,
       "POST /api/auth/sign-in/social": { url: googleUrl, redirect: false },
     });
     window.history.replaceState(null, "", "/puzzles/first-steps");
@@ -152,7 +183,7 @@ describe("ログイン", () => {
 
   it("ログインを始められなければ案内を出し、もう一度押せるようにする", async () => {
     const user = userEvent.setup();
-    stubFetch(ROUTES);
+    stubFetch(SIGNED_OUT);
     render(<App />);
     const button = await screen.findByRole("button", { name: "Google でログイン" });
     await user.click(button);
@@ -177,28 +208,46 @@ describe("ログイン", () => {
     expect(button).toBeEnabled();
   });
 
-  it("ログイン状態を確かめられなくても、ログインのボタンは表示する", async () => {
+  it("ログイン状態を確かめられなければ、ログイン画面を出す", async () => {
     const { "GET /api/auth/get-session": _, ...withoutSession } = ROUTES;
     stubFetch(withoutSession);
     render(<App />);
     expect(await screen.findByRole("button", { name: "Google でログイン" })).toBeInTheDocument();
   });
 
-  it("ログイン中なら名前を表示し、ログアウトできる", async () => {
+  it("ログイン中なら名前を表示し、ログアウトするとログイン画面に戻る", async () => {
     const user = userEvent.setup();
-    const fetchMock = stubFetch({
-      ...ROUTES,
-      "GET /api/auth/get-session": session(signedIn),
-      "POST /api/auth/sign-out": { success: true },
-    });
+    const fetchMock = stubFetch({ ...ROUTES, "POST /api/auth/sign-out": { success: true } });
     render(<App />);
     expect(await screen.findByText("ロボ 太郎")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /まっすぐ進もう/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Google でログイン" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "ログアウト" }));
-    expect(await screen.findByRole("button", { name: "Google でログイン" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "ログインして遊ぶ" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /まっすぐ進もう/ })).not.toBeInTheDocument();
     expect(screen.queryByText("ロボ 太郎")).not.toBeInTheDocument();
     expect(bodiesOf(fetchMock, "POST", "/api/auth/sign-out")).toHaveLength(1);
+  });
+
+  it("遊んでいるあいだにセッションが切れたら、ログイン画面に戻す", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { pathname } = new URL(String(input), window.location.origin);
+        if (pathname === "/api/puzzles/colored") {
+          return new Response(JSON.stringify({ error: "ログインしてください" }), { status: 401 });
+        }
+        return mockFetch(ROUTES)(input, init);
+      }),
+    );
+    render(<App />);
+    await user.click(await screen.findByRole("link", { name: /色つき/ }));
+    expect(await screen.findByRole("heading", { name: "ログインして遊ぶ" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ログアウト" })).not.toBeInTheDocument();
+    // ログインし直すと、開こうとしていたステージに戻る
+    expect(window.location.pathname).toBe("/puzzles/colored");
   });
 
   it("プロフィール画像を表示し、読み込めなければ頭文字に切り替える", async () => {
@@ -217,7 +266,7 @@ describe("ログイン", () => {
 
   it("ログアウトに失敗したらログイン中のまま", async () => {
     const user = userEvent.setup();
-    stubFetch({ ...ROUTES, "GET /api/auth/get-session": session(signedIn) });
+    stubFetch(ROUTES);
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "ログアウト" }));
     expect(screen.getByText("ロボ 太郎")).toBeInTheDocument();
@@ -225,7 +274,7 @@ describe("ログイン", () => {
 
   it("ログインに失敗して戻ってきたら案内を出し、URL からは消す", async () => {
     const user = userEvent.setup();
-    stubFetch(ROUTES);
+    stubFetch(SIGNED_OUT);
     window.history.replaceState(null, "", "/puzzles/first-steps?error=state_mismatch");
     render(<App />);
     expect(screen.getByRole("alert")).toHaveTextContent("Google でログインできませんでした");
@@ -237,7 +286,7 @@ describe("ログイン", () => {
   });
 
   it("Google の画面でキャンセルして戻ってきたときは案内を出さない", async () => {
-    stubFetch(ROUTES);
+    stubFetch(SIGNED_OUT);
     window.history.replaceState(null, "", "/?error=access_denied");
     render(<App />);
     expect(await screen.findByRole("button", { name: "Google でログイン" })).toBeInTheDocument();

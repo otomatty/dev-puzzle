@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyProgram, parseNotation } from "../engine";
 import { CATALOG } from "../puzzles/catalog";
 import type {
@@ -8,17 +8,26 @@ import type {
   PuzzleListResponse,
   PuzzleResponse,
 } from "../shared/api";
+import { signedInHeaders } from "./test/fixtures";
 
 const BASE = "http://example.com/api";
+const SIGNED_OUT = new Headers();
 
-function get(path: string) {
-  return exports.default.fetch(`${BASE}${path}`);
+/** ふだんはログイン中のユーザーとしてリクエストする */
+let signedIn: Headers;
+
+beforeEach(async () => {
+  signedIn = await signedInHeaders();
+});
+
+function get(path: string, headers = signedIn) {
+  return exports.default.fetch(`${BASE}${path}`, { headers });
 }
 
-function post(path: string, body: unknown) {
+function post(path: string, body: unknown, headers = signedIn) {
   return exports.default.fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...Object.fromEntries(headers), "content-type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -27,8 +36,8 @@ const first = CATALOG[0] as (typeof CATALOG)[number];
 const solution = parseNotation(["F F F F"], first.definition);
 
 describe("GET /api/health", () => {
-  it("200 と status: ok を返す", async () => {
-    const res = await get("/health");
+  it("ログインしていなくても 200 と status: ok を返す", async () => {
+    const res = await get("/health", SIGNED_OUT);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
   });
@@ -124,6 +133,52 @@ describe("POST /api/puzzles/:id/clears", () => {
   it("存在しないステージは 404", async () => {
     const res = await post("/puzzles/no-such-puzzle/clears", { program: solution });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("ログインしていないとき", () => {
+  it("ステージの一覧と詳細は 401", async () => {
+    for (const path of ["/puzzles", `/puzzles/${first.id}`, "/puzzles/no-such-puzzle"]) {
+      const res = await get(path, SIGNED_OUT);
+      expect(res.status, path).toBe(401);
+      expect(await res.json<ErrorResponse>()).toEqual({ error: "ログインしてください" });
+    }
+  });
+
+  it("クリア報告は 401 で、数えない", async () => {
+    const res = await post(`/puzzles/${first.id}/clears`, { program: solution }, SIGNED_OUT);
+    expect(res.status).toBe(401);
+    const { puzzle } = await (await get(`/puzzles/${first.id}`)).json<PuzzleResponse>();
+    expect(puzzle.solves).toBe(0);
+  });
+
+  it("署名の合わない Cookie は受け付けない", async () => {
+    const [, token = ""] = /session_token=([^.;]+)/.exec(signedIn.get("cookie") ?? "") ?? [];
+    expect(token).not.toBe("");
+    const forged = new Headers({ cookie: `better-auth.session_token=${token}.forged` });
+    expect((await get("/puzzles", forged)).status).toBe(401);
+  });
+
+  it("期限の切れたセッションは受け付けない", async () => {
+    const past = new Date(Date.now() - 1000).toISOString();
+    await env.DB.prepare("UPDATE session SET expiresAt = ?").bind(past).run();
+    expect((await get("/puzzles")).status).toBe(401);
+  });
+});
+
+describe("ステージの API でのログインの確認", () => {
+  it("セッションの期限は延ばさない(延長は /api/auth/get-session に任せる)", async () => {
+    // 前回の延長から 2 日たったことにする
+    const expiresAt = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("UPDATE session SET expiresAt = ?").bind(expiresAt).run();
+    const current = () =>
+      env.DB.prepare("SELECT expiresAt FROM session").first<string>("expiresAt");
+
+    expect((await get("/puzzles")).status).toBe(200);
+    expect(await current()).toBe(expiresAt);
+
+    expect((await get("/auth/get-session")).status).toBe(200);
+    expect(await current()).not.toBe(expiresAt);
   });
 });
 

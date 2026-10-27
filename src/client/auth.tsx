@@ -1,8 +1,9 @@
 import { createAuthClient } from "better-auth/client";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import { onUnauthorized } from "./api";
 
 /**
- * ログイン状態。ログインは任意で、していなくてもすべてのステージを遊べる。
+ * ログイン状態。ステージを遊ぶにはログインが必要で、していなければログイン画面を出す。
  * ログインやセッションの確認は Better Auth のクライアントで Worker の /api/auth/* に問い合わせる。
  */
 
@@ -67,6 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     return () => controller.abort();
   }, []);
+
+  // 遊んでいるあいだにセッションが切れたら、ログイン画面に戻す
+  useEffect(() => onUnauthorized(() => setState({ status: "signedOut" })), []);
 
   // 再読み込みで同じ案内が出ないよう、URL からは消しておく
   useEffect(() => {

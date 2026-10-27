@@ -19,6 +19,17 @@ app.on(["GET", "POST"], "/auth/*", (c) =>
   getAuth(c.env, new URL(c.req.url).origin).handler(c.req.raw),
 );
 
+// ステージの API はログインしていないと使えない
+app.use("/puzzles/*", async (c, next) => {
+  const session = await getAuth(c.env, new URL(c.req.url).origin).api.getSession({
+    headers: c.req.raw.headers,
+    // ここで期限を延ばしても Cookie は更新されないので、延長は画面が呼ぶ /api/auth/get-session に任せる
+    query: { disableRefresh: true },
+  });
+  if (!session) return c.json<ErrorResponse>({ error: "ログインしてください" }, 401);
+  await next();
+});
+
 app.get("/puzzles", async (c) => {
   const puzzles = await listPuzzles(c.env.DB);
   return c.json<PuzzleListResponse>({ puzzles });

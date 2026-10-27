@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { SECRETS, sessionCookie } from "./e2e/session.ts";
 
 const PORT = 4173;
 
@@ -8,8 +9,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
+  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: `http://localhost:${PORT}`,
+    // ログインしないと遊べないので、ふだんはテスト用のユーザーでログインした状態で始める
+    storageState: { cookies: [sessionCookie("localhost")], origins: [] },
     trace: "on-first-retry",
     // ブラウザを別途用意している環境用(未設定なら Playwright 同梱のものを使う)
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
@@ -25,11 +29,7 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    // ログインのシークレット(wrangler.jsonc の secrets.required)。本物の Google には接続しないのでダミーでよい
-    env: {
-      BETTER_AUTH_SECRET: "e2e-secret-Qw8rT2yU6iO0pA4sD7fG1hJ5kL9zX3cV",
-      GOOGLE_CLIENT_ID: "e2e-client-id.apps.googleusercontent.com",
-      GOOGLE_CLIENT_SECRET: "e2e-client-secret",
-    },
+    // ログインのシークレット(wrangler.jsonc の secrets.required)。.dev.vars があればそちらが使われる
+    env: SECRETS,
   },
 });

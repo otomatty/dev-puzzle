@@ -236,6 +236,21 @@ input {
 /* ------------------------------------------------------------------
  * ログイン
  * ------------------------------------------------------------------ */
+.login {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  max-width: 38em;
+  margin: 24px 0 40px;
+}
+
+.login-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
 .google-login {
   white-space: nowrap;
 }
@@ -917,8 +932,7 @@ input {
     font-size: 0.8125rem;
   }
 
-  /* 狭い画面では見た目だけ短くする(読み上げは「Google でログイン」やユーザー名のまま) */
-  .google-login-prefix,
+  /* 狭い画面では見た目だけ隠す(読み上げはユーザー名のまま) */
   .account-name {
     position: absolute;
     width: 1px;
