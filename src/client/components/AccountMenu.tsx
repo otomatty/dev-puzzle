@@ -26,36 +26,30 @@ function Avatar({ user }: { user: User }) {
   );
 }
 
-/** ヘッダーのログイン・ログアウト */
-export function AccountMenu() {
-  const { state, signIn, signOut } = useAuth();
+/** Google でログインするボタン。ログインが終わると今の画面に戻ってくる */
+export function GoogleLoginButton() {
+  const { signIn } = useAuth();
   const pathname = usePathname();
   const [pending, setPending] = useState(false);
 
-  const handleSignIn = async () => {
+  const handleClick = async () => {
     setPending(true);
     // Google の画面に移るときは押せないままでよい。始められなかったときだけ戻す
     if (!(await signIn(pathname))) setPending(false);
   };
 
-  if (state.status === "loading") return null;
-  if (state.status === "signedOut") {
-    // 狭い画面では「Google で」を隠すので、読み上げ用の名前は aria-label で固定する
-    return (
-      <button
-        type="button"
-        className="button google-login"
-        aria-label="Google でログイン"
-        disabled={pending}
-        onClick={handleSignIn}
-      >
-        <GoogleLogo />
-        <span>
-          <span className="google-login-prefix">Google で</span>ログイン
-        </span>
-      </button>
-    );
-  }
+  return (
+    <button type="button" className="button google-login" disabled={pending} onClick={handleClick}>
+      <GoogleLogo />
+      <span>Google でログイン</span>
+    </button>
+  );
+}
+
+/** ヘッダーの名前とログアウト。ログインしていなければログイン画面にボタンがあるので、ここには何も出さない */
+export function AccountMenu() {
+  const { state, signOut } = useAuth();
+  if (state.status !== "signedIn") return null;
   return (
     <div className="account">
       <Avatar user={state.user} />

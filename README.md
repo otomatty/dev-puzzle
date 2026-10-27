@@ -12,7 +12,7 @@
 
 実行するとロボットが動きます。星を全部集めるとクリアです。組んだプログラムと、クリアしたステージは、そのブラウザに保存されます。クリア人数は、サーバーが同じルールでプログラムを最後まで実行し、解けたときだけ増えます。
 
-Google アカウントでログインできます。ログインは任意で、しなくてもすべてのステージを遊べます。ログインすると、画面の右上に名前とアイコンが出ます。
+遊ぶには Google アカウントでのログインが必要です。ログインしていないと、どの画面を開いてもログイン画面が出て、ログインするとその画面に戻ります。ログイン中は、画面の右上に名前とアイコンが出ます。
 
 色の区別がしにくいときは、色を形でも表示できます。画面は端末のライトモードとダークモードに合わせ、スマートフォンでも操作できます。
 
@@ -26,7 +26,7 @@ bun run db:setup:local
 bun run dev
 ```
 
-ブラウザで http://localhost:5173 を開きます。`db:setup:local` はローカルのデータベースに表とステージを入れます。ステージ定義を変えたあとにもう一度実行します。
+ブラウザで http://localhost:5173 を開きます。`db:setup:local` はローカルのデータベースに表とステージを入れます。ステージ定義を変えたあとにもう一度実行します。遊ぶにはログインが必要なので、先に下の「Google ログインを設定する」を済ませます。
 
 | コマンド                   | 内容                                                             |
 | -------------------------- | ---------------------------------------------------------------- |
@@ -41,9 +41,9 @@ bun run dev
 
 ### Google ログインを設定する
 
-ログインを試すときだけ必要です。設定しなくてもステージは遊べます。ログインだけが失敗します。
+`bun run dev` や `bun run preview` で遊ぶには必要です。`bun run test` と `bun run test:e2e` には要りません。
 
-1. [Google Cloud Console](https://console.cloud.google.com/) の「Google Auth Platform」で、ブランディングと対象を設定する。公開ステータスが「テスト」のあいだは、テストユーザーに追加したアカウントしかログインできない。
+1. [Google Cloud Console](https://console.cloud.google.com/) の「Google Auth Platform」で、ブランディングと対象を設定する。公開ステータスが「テスト」のあいだは、テストユーザーに追加したアカウントしかログインできない。ログインしないと遊べないので、本番では「対象」の「アプリを公開」で公開ステータスを「本番環境」にする。
 2. 「クライアント」から、種類が「ウェブ アプリケーション」の OAuth クライアントを作り、「承認済みのリダイレクト URI」に次を登録する。
    - `http://localhost:5173/api/auth/callback/google`(`bun run dev`)
    - `http://localhost:4173/api/auth/callback/google`(`bun run preview`)
@@ -51,7 +51,9 @@ bun run dev
 3. `.dev.vars.example` を `.dev.vars` にコピーし、値を入れる。`BETTER_AUTH_SECRET` は `openssl rand -base64 32` で作る。
 4. 本番には、同じ 3 つを `bunx wrangler secret put <名前>` で登録する。`BETTER_AUTH_SECRET` はローカルと別の値にする。
 
-3 つのシークレットは `wrangler.jsonc` の `secrets.required` に書いてあり、本番に登録していないと `bun run deploy` は失敗します。E2E では `playwright.config.ts` からダミーの値を渡します。ログインの表は `migrations/0002_create_auth_tables.sql` で、本番へは `bun run db:setup:remote` で反映します。
+3 つのシークレットは `wrangler.jsonc` の `secrets.required` に書いてあり、本番に登録していないと `bun run deploy` は失敗します。ログインの表は `migrations/0002_create_auth_tables.sql` で、本番へは `bun run db:setup:remote` で反映します。
+
+E2E では Google を通せないので、`e2e/global-setup.ts` がローカルのデータベースにテスト用のユーザーとセッションを入れ、ブラウザにそのセッションの Cookie を持たせます(`e2e/session.ts`)。シークレットは、`.dev.vars` がなければ `playwright.config.ts` からダミーの値を渡し、あれば `.dev.vars` の値を使います。
 
 ### ステージを追加・変更する
 
@@ -75,6 +77,6 @@ bun run deploy
 
 配信は Cloudflare Workers、ステージとクリア人数は D1、画面は React です。push と pull request では、lint、型検査、テスト、Playwright が動きます。
 
-ログインは Better Auth で、手段は Google アカウントだけです。ユーザーとセッションも D1 に保存します。設定は `src/worker/auth.ts`、画面側は `src/client/auth.tsx` です。Better Auth は Node.js の機能を使うので、`wrangler.jsonc` で `nodejs_compat` を有効にしています。Better Auth に組み込まれたレート制限は Workers では有効にならないので、必要なら Cloudflare のレート制限ルールを使います。
+ログインは Better Auth で、手段は Google アカウントだけです。ユーザーとセッションも D1 に保存します。ステージの API(`/api/puzzles` 以下)は、ログインしていないと 401 を返します。設定は `src/worker/auth.ts`、画面側は `src/client/auth.tsx` です。Better Auth は Node.js の機能を使うので、`wrangler.jsonc` で `nodejs_compat` を有効にしています。Better Auth に組み込まれたレート制限は Workers では有効にならないので、必要なら Cloudflare のレート制限ルールを使います。
 
 Better Auth を更新して必要な表や列が変わると、`src/worker/auth.test.ts` のテストが失敗し、足りない分の SQL を表示します。その SQL で `migrations/` にマイグレーションを足します。

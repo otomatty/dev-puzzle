@@ -1,5 +1,6 @@
-import { AuthProvider } from "./auth";
+import { AuthProvider, useAuth } from "./auth";
 import { AccountMenu, LoginFailedNotice } from "./components/AccountMenu";
+import { LoginPage } from "./pages/LoginPage";
 import { PlayPage } from "./pages/PlayPage";
 import { PuzzleListPage } from "./pages/PuzzleListPage";
 import { Link, matchRoute, usePathname } from "./router";
@@ -38,6 +39,14 @@ function Routes() {
   }
 }
 
+/** ログインしていなければ、開いた画面の代わりにログイン画面を出す */
+function Main() {
+  const { state } = useAuth();
+  if (state.status === "loading") return null;
+  if (state.status === "signedOut") return <LoginPage />;
+  return <Routes />;
+}
+
 export function App() {
   return (
     <SettingsProvider>
@@ -54,7 +63,7 @@ export function App() {
           </header>
           <main className="app-main">
             <LoginFailedNotice />
-            <Routes />
+            <Main />
           </main>
         </div>
       </AuthProvider>

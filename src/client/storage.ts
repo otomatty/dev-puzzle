@@ -37,6 +37,12 @@ export function markCleared(id: string): void {
   write(CLEARED_KEY, [...cleared]);
 }
 
+export function unmarkCleared(id: string): void {
+  const cleared = loadCleared();
+  cleared.delete(id);
+  write(CLEARED_KEY, [...cleared]);
+}
+
 /** 保存済みのプログラムを読む。ステージの形と合わなければ null */
 export function loadProgram(id: string, def: PuzzleDefinition): Program | null {
   const result = parseProgram(read(`${PREFIX}program:${id}`), def);
