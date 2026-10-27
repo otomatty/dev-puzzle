@@ -70,7 +70,7 @@ main にマージすると、本番のデータベースにステージが反映
 
 main に push されると(pull request のマージを含む)、GitHub Actions(`.github/workflows/ci.yml`)が lint、型検査、テスト、Playwright を実行し、すべて通ったら Cloudflare にデプロイします。デプロイのジョブは、先に `bun run db:setup:remote` で本番の D1 にマイグレーションとステージを反映し、そのあと `bun run deploy` を実行します。ステージの反映は upsert なので、クリア人数は残ります。
 
-main への push が続いたときは、前の実行が終わるのを待ってから、いちばん新しいものだけをデプロイします。途中で止めると、マイグレーションだけ反映されてデプロイされないことがあるためです。
+main への push が続いたときは、実行中のものは止めずにデプロイまで進め、終わってから次を実行します。途中で止めると、マイグレーションだけ反映されてデプロイされないことがあるためです。待っているあいだにさらに push があったときは、待っているうちのいちばん新しいものだけを実行します。
 
 GitHub Actions から Cloudflare に入るために、リポジトリの「Settings」→「Secrets and variables」→「Actions」に次の 2 つを登録します。
 
