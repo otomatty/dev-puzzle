@@ -7,6 +7,7 @@ import {
   markCleared,
   saveColorAssist,
   saveProgram,
+  unmarkCleared,
 } from "./storage";
 import { straightLine } from "./test/fixtures";
 
@@ -20,6 +21,10 @@ describe("storage", () => {
     markCleared("b");
     markCleared("a");
     expect([...loadCleared()]).toEqual(["a", "b"]);
+
+    unmarkCleared("a");
+    unmarkCleared("c");
+    expect([...loadCleared()]).toEqual(["b"]);
   });
 
   it("プログラムを保存して読み戻す", () => {

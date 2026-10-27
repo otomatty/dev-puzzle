@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Program } from "../../engine";
-import { fetchPuzzle, reportClear } from "../api";
+import { ApiError, fetchPuzzle, reportClear } from "../api";
 import { Difficulty } from "../components/Difficulty";
 import { Player } from "../components/Player";
 import { Link } from "../router";
-import { loadCleared, markCleared } from "../storage";
+import { loadCleared, markCleared, unmarkCleared } from "../storage";
 import { useAsync } from "../useAsync";
 
 export function PlayPage({ id }: { id: string }) {
@@ -27,8 +27,13 @@ export function PlayPage({ id }: { id: string }) {
       if (loadCleared().has(id)) return;
       markCleared(id);
       setCleared(true);
-      reportClear(id, program).then(setSolves, () => {
-        // 報告に失敗しても遊ぶのには影響しない
+      reportClear(id, program).then(setSolves, (error: unknown) => {
+        // ログインが切れていたら、ログインし直してもう一度クリアしたときに報告できるよう取り消す。
+        // ほかの失敗は遊ぶのには影響しないので、クリア済みのままにする
+        if (error instanceof ApiError && error.status === 401) {
+          unmarkCleared(id);
+          setCleared(false);
+        }
       });
     },
     [id],

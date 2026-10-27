@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { User } from "./auth";
+import { loadCleared } from "./storage";
 import { colored, mockFetch, straightLine, summaries } from "./test/fixtures";
 
 const signedIn: User = {
@@ -108,6 +109,20 @@ describe("ログイン", () => {
     const fetchMock = vi.fn(mockFetch(routes));
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
+  }
+
+  /** path だけ 401(ログインが切れた)を返し、ほかは ROUTES のとおりに応答する */
+  function stubUnauthorized(path: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { pathname } = new URL(String(input), window.location.origin);
+        if (pathname === path) {
+          return new Response(JSON.stringify({ error: "ログインしてください" }), { status: 401 });
+        }
+        return mockFetch(ROUTES)(input, init);
+      }),
+    );
   }
 
   /** 指定したメソッドとパスへのリクエストの本文(JSON) */
@@ -232,22 +247,28 @@ describe("ログイン", () => {
 
   it("遊んでいるあいだにセッションが切れたら、ログイン画面に戻す", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { pathname } = new URL(String(input), window.location.origin);
-        if (pathname === "/api/puzzles/colored") {
-          return new Response(JSON.stringify({ error: "ログインしてください" }), { status: 401 });
-        }
-        return mockFetch(ROUTES)(input, init);
-      }),
-    );
+    stubUnauthorized("/api/puzzles/colored");
     render(<App />);
     await user.click(await screen.findByRole("link", { name: /色つき/ }));
     expect(await screen.findByRole("heading", { name: "ログインして遊ぶ" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "ログアウト" })).not.toBeInTheDocument();
     // ログインし直すと、開こうとしていたステージに戻る
     expect(window.location.pathname).toBe("/puzzles/colored");
+  });
+
+  it("クリアを報告できずにログインが切れていたら、ログインし直してから報告できるようクリア済みにしない", async () => {
+    const user = userEvent.setup();
+    stubUnauthorized("/api/puzzles/first-steps/clears");
+    window.history.replaceState(null, "", "/puzzles/first-steps");
+    render(<App />);
+    await screen.findByRole("heading", { name: "まっすぐ進もう" });
+
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "前進" }));
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole("button", { name: "1 手進める" }));
+    }
+    expect(await screen.findByRole("heading", { name: "ログインして遊ぶ" })).toBeInTheDocument();
+    expect(loadCleared().has("first-steps")).toBe(false);
   });
 
   it("プロフィール画像を表示し、読み込めなければ頭文字に切り替える", async () => {
