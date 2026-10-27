@@ -42,7 +42,7 @@ export function App() {
       <div className="app">
         <header className="app-header">
           <Link className="wordmark" href="/">
-            RoboZZle
+            DevPuzzle
           </Link>
           <ColorAssistToggle />
         </header>

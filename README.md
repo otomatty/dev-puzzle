@@ -1,117 +1,60 @@
-# RoboZZle
+# DevPuzzle
 
-ロボットに命令を並べて盤面の星をすべて集める、RoboZZle 型のプログラミングパズル。Cloudflare Workers 上で動く Web アプリ。
+ロボットに命令を並べて、盤面の星をすべて集めるプログラミングパズルです。RoboZZle と同じ種類のパズルで、元のサイトは https://robozzle.com/ です。
 
-- 内蔵ステージ 14 問(難しさ 1〜5)
-- 命令: 前進・左右回転・関数呼び出し(F1〜F5)・ペンキ。各命令に「赤／緑／青の床のときだけ」の条件を付けられる
-- 組んだプログラムとクリア状況はブラウザ(localStorage)に保存
-- クリア人数は D1 に記録。送られたプログラムを Worker 側でも同じエンジンで実行し、本当にクリアできるときだけ数える
-- 色を形(▲●■)でも表示する設定、ダークモード、スマートフォン対応
+遊べる場所は https://robozzle.saedgewell.workers.dev です。ステージは 14 問で、難しさは 1 から 5 です。
 
-## 技術スタック
+## 遊び方
 
-| 役割                      | 採用                                    | バージョン                |
-| ------------------------- | --------------------------------------- | ------------------------- |
-| ランタイム / ホスティング | Cloudflare Workers(静的アセット + API)  | wrangler 4.152.0          |
-| データベース              | Cloudflare D1                           |                           |
-| フロントエンド            | React + Vite(`@cloudflare/vite-plugin`) | React 19.3.1 / Vite 8.3.5 |
-| API                       | Hono                                    | 4.13.14                   |
-| 言語 / 型チェック         | TypeScript(ネイティブ版 `tsc`)          | 7.0.2                     |
-| パッケージマネージャ      | Bun                                     | 1.4.4                     |
+ステージを開いて、関数のマスに命令を置きます。置ける命令は前進、左を向く、右を向く、関数の呼び出し、赤・緑・青に塗るです。ステージによって、関数の数、マスの数、塗れる色は違います。
 
-## Lint・テスト
+各命令は、いつでも実行するか、赤・緑・青の床にいるときだけ実行するかを選べます。
 
-| 役割                                   | 採用                        | バージョン      |
-| -------------------------------------- | --------------------------- | --------------- |
-| Lint + Format                          | Biome                       | 2.6.3           |
-| ユニット / コンポーネント / API テスト | Vitest                      | 5.0.5           |
-| Workers ランタイム上のテスト           | `@cloudflare/vitest-plugin` | 1.4.7           |
-| DOM 環境                               | happy-dom + Testing Library | 21.0.4 / 16.3.3 |
-| E2E                                    | Playwright                  | 1.64.1          |
+実行するとロボットが動きます。星を全部集めるとクリアです。組んだプログラムと、クリアしたステージは、そのブラウザに保存されます。クリア人数は、サーバーが同じルールでプログラムを最後まで実行し、解けたときだけ増えます。
 
-選定理由:
+色の区別がしにくいときは、色を形でも表示できます。画面は端末のライトモードとダークモードに合わせ、スマートフォンでも操作できます。
 
-- **Biome**: Lint と Format が 1 ツールで完結し、TypeScript 本体に依存しない。typescript-eslint は TypeScript 6.1 未満のみ対応で TS 7 と組み合わせられないため ESLint は採らない。
-- **Vitest**: Vite と設定を共有でき、Cloudflare 公式プラグインで Worker と D1 を本番と同じ workerd 上でテストできる。旧 `@cloudflare/vitest-pool-workers` は非推奨になったため後継の `@cloudflare/vitest-plugin` を使う。
-- **Playwright**: `vite preview`(workerd + ローカル D1)に対して、デスクトップとモバイルの両方で E2E を回す。
+## 手元で動かす
 
-依存パッケージまわりの安全策は、次の 2 つのファイルで設定している。
-
-- `package.json`: 依存はすべて完全一致のバージョンで書く。`trustedDependencies` で、インストール時のスクリプト実行を esbuild と workerd だけに許可している
-- `bunfig.toml`: `exact = true` で `bun add` でも完全一致のバージョンで保存し、`minimumReleaseAge = 86400` で公開から 1 日未満の版を入れない
-
-Bun はパッケージマネージャとスクリプトの実行に使う。Vite・Vitest・Wrangler・Playwright は Node.js 上で動くので、Node.js 22.18 以上も必要(`.node-version`)。
-
-## ディレクトリ
-
-```
-src/
-  engine/    ゲームのルール(盤面・命令・実行)。DOM にも Workers にも依存しない純粋な TS
-  puzzles/   内蔵ステージの定義(catalog.ts)と D1 用シード SQL の生成
-  shared/    API のレスポンス型(Worker とクライアントで共有)
-  worker/    Hono の API(/api/*)と D1 アクセス
-  client/    React の UI
-migrations/  D1 のスキーマ
-seeds/       内蔵ステージを登録する SQL(catalog.ts から生成。手で編集しない)
-e2e/         Playwright
-```
-
-エンジンはクライアントと Worker の両方で使う。クライアントは 1 手ずつ実行してアニメーションし、Worker はクリア報告を受けたときに同じエンジンで最後まで実行して検証する。
-
-Vitest は 3 プロジェクトに分かれている。
-
-- `engine`: `src/engine/` と `src/puzzles/`。全ステージが模範解答でクリアできることもここで確かめる(模範解答はテストにだけ置き、配信しない)
-- `client`: `src/client/`(happy-dom)
-- `worker`: `src/worker/`(workerd。テストごとに D1 を作り直す)
-
-## 開発
+Bun 1.4.4 と Node.js 22.18 以上が必要です。
 
 ```sh
 bun install
-bun run db:setup:local   # ローカルの D1 にスキーマとステージを入れる(初回とステージ変更時)
-bun run dev              # http://localhost:5173
+bun run db:setup:local
+bun run dev
 ```
 
-| コマンド                   | 内容                                                         |
-| -------------------------- | ------------------------------------------------------------ |
-| `bun run check`            | Biome(lint + format)                                         |
-| `bun run check:fix`        | Biome の自動修正                                             |
-| `bun run typecheck`        | `tsc -b`                                                     |
-| `bun run test`             | Vitest(engine / client / worker)                             |
-| `bun run test:coverage`    | カバレッジ付き                                               |
-| `bun run test:e2e`         | Playwright(初回は `bunx playwright install chromium`)        |
-| `bun run verify`           | check + typecheck + test                                     |
-| `bun run db:generate-seed` | `catalog.ts` から `seeds/0001_puzzles.sql` を作り直す        |
-| `bun run cf-typegen`       | `wrangler.jsonc` から `worker-configuration.d.ts` を作り直す |
+ブラウザで http://localhost:5173 を開きます。`db:setup:local` はローカルのデータベースに表とステージを入れます。ステージ定義を変えたあとにもう一度実行します。
 
-テストは `bun run test` で実行する。`bun test` は Bun 組み込みのテストランナーが起動してしまうため、案内を出して止めるようにしている(`scripts/bun-test-guard.ts`)。
+| コマンド                   | 内容                                                             |
+| -------------------------- | ---------------------------------------------------------------- |
+| `bun run check`            | Biome で lint と format を見る                                   |
+| `bun run typecheck`        | 型を検査する                                                     |
+| `bun run test`             | テストを実行する                                                 |
+| `bun run test:e2e`         | Playwright。初回は `bunx playwright install chromium` を実行する |
+| `bun run verify`           | check、型検査、テスト                                            |
+| `bun run db:generate-seed` | ステージ定義からシード SQL を作り直す                            |
+
+テストは `bun run test` で実行します。`bun test` は Bun 組み込みのテストランナーが起動し、Workers 用のテストが動きません。
 
 ### ステージを追加・変更する
 
-1. `src/puzzles/catalog.ts` を編集する(公開済みステージの `id` は変えない)
-2. `src/puzzles/catalog.test.ts` の `SOLUTIONS` に模範解答を書く
-3. `bun run db:generate-seed` でシード SQL を作り直す
-4. `bun run test` で全ステージが解けることを確認する
+1. `src/puzzles/catalog.ts` を編集する。公開済みステージの `id` は変えない。
+2. `src/puzzles/catalog.test.ts` の `SOLUTIONS` に模範解答を書く。
+3. `bun run db:generate-seed` でシード SQL を作り直す。
+4. `bun run test` で全ステージが解けることを確認する。
 
-シード SQL は upsert なので、本番で流し直してもクリア人数は保たれる。`seeds/` が `catalog.ts` とずれていると、テストと CI が失敗する。
+模範解答はテストにだけあり、サイトには出しません。シード SQL は手で編集しません。`seeds/` が `catalog.ts` とずれているとテストが失敗します。
 
-## CI
-
-`.github/workflows/ci.yml` で、push(main)と pull request ごとに次を実行する。
-
-- Biome、型チェック、シード SQL のずれ検知、Vitest(カバレッジ付き)
-- Playwright(Chromium のデスクトップとモバイル)。失敗時はレポートを artifact に保存
-
-## Cloudflare へのデプロイ
-
-`wrangler.jsonc` の D1 には `database_id` を書いていない。初回の `wrangler deploy` で D1 が自動作成され、ID が `wrangler.jsonc` に書き戻される。
+本番のクリア人数を残したままステージを更新するときは、先にリモートのデータベースへ反映してからデプロイします。D1 の ID は `wrangler.jsonc` に書いてあります。
 
 ```sh
-bunx wrangler login
-bun run deploy             # ビルドしてデプロイ(初回は D1 も作成される)
-bun run db:setup:remote    # 本番 D1 にスキーマとステージを入れる
+bun run db:setup:remote
+bun run deploy
 ```
 
-初回デプロイ後に `wrangler.jsonc` に追記された `database_id` はコミットしておく。以降、スキーマやステージを変えたときは `bun run db:setup:remote` を流してから `bun run deploy` する。
+## 構成
 
-Cloudflare の Workers Builds(GitHub 連携)で自動デプロイする場合は、ビルドコマンドを `bun run build`、デプロイコマンドを `bunx wrangler deploy && bun run db:setup:remote` にする(Workers Builds は `bun.lock` を見て Bun でインストールする)。
+ゲームのルールは `src/engine/` にあります。ブラウザは 1 手ずつ動かして表示し、サーバーはクリア報告を受けたときに同じルールで最後まで実行します。ステージ定義は `src/puzzles/catalog.ts`、API は `src/worker/`、画面は `src/client/` です。
+
+配信は Cloudflare Workers、ステージとクリア人数は D1、画面は React です。push と pull request では、lint、型検査、テスト、Playwright が動きます。
