@@ -40,11 +40,15 @@ export const summaries: PuzzleSummary[] = [straightLine, colored].map(
   }),
 );
 
-/** fetch をパスごとの JSON 応答に差し替える */
+/** fetch をパスごとの JSON 応答に差し替える。キーは「メソッド パス」 */
 export function mockFetch(routes: Record<string, unknown>) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input.toString();
-    const key = `${init?.method ?? "GET"} ${url}`;
+    const raw = input instanceof Request ? input.url : input.toString();
+    const url = new URL(raw, window.location.origin);
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
+    const key = `${method} ${url.pathname}${url.search}`;
     if (!(key in routes)) {
       return new Response(JSON.stringify({ error: "見つかりません" }), { status: 404 });
     }

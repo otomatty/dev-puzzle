@@ -7,11 +7,17 @@ import type {
   PuzzleListResponse,
   PuzzleResponse,
 } from "../shared/api";
+import { getAuth } from "./auth";
 import { findPuzzle, incrementSolves, listPuzzles } from "./db";
 
 const app = new Hono<{ Bindings: Env }>().basePath("/api");
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// ログイン・ログアウト・セッションの取得などは Better Auth に任せる
+app.on(["GET", "POST"], "/auth/*", (c) =>
+  getAuth(c.env, new URL(c.req.url).origin).handler(c.req.raw),
+);
 
 app.get("/puzzles", async (c) => {
   const puzzles = await listPuzzles(c.env.DB);

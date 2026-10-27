@@ -3,6 +3,8 @@
   "name": "robozzle",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-10-19",
+  // Better Auth が AsyncLocalStorage と node:crypto を使う
+  "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "assets": {
     // React の SPA を静的配信し、/api/* だけ Worker で処理する
@@ -17,6 +19,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Better Auth の署名・暗号化の鍵と、Google ログインの OAuth クライアント。
+  // ローカルは .dev.vars、本番は `wrangler secret put` で設定する
+  "secrets": {
+    "required": ["BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+  },
   "observability": {
     "enabled": true
   }

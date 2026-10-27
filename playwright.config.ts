@@ -25,5 +25,11 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // ログインのシークレット(wrangler.jsonc の secrets.required)。本物の Google には接続しないのでダミーでよい
+    env: {
+      BETTER_AUTH_SECRET: "e2e-secret-Qw8rT2yU6iO0pA4sD7fG1hJ5kL9zX3cV",
+      GOOGLE_CLIENT_ID: "e2e-client-id.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "e2e-client-secret",
+    },
   },
 });
